@@ -22,26 +22,25 @@ def imagenorm(img):
 
 def Giles_plot(diff,acc):
         #Set mlmc params
-        M=diff.M
-        N0=diff.N0
-        Lmax=diff.Lmax
+        M=diff.netG.M
+        N0=diff.netG.N0
+        Lmax=diff.netG.Lmax
         Nsamples=10**3
-        
-        min_l=diff.min_l
+        condition_x=diff.data['SR']
+        min_l=diff.netG.min_l
 
         #Variance and mean samples
-        sums,sqsums,_=diff.mlmc(1e5,M,N0=1,min_l=0) #dummy run to get sum shapes 
+        sums,sqsums,_=diff.netG.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
         sums=torch.zeros((Lmax+1-min_l,*sums.shape[1:]))
         sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape[1:]))
-        condition_x=diff.data['SR']
         # Directory to save means and norms                                                                                               
-        this_sample_dir = os.path.join(diff.eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
+        this_sample_dir = os.path.join(diff.netG.eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
         if not os.path.exists(this_sample_dir):
             os.mkdir(this_sample_dir)
             print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
             for i,l in enumerate(range(min_l,Lmax+1)):
                 print(f'l={l}')
-                sums[i],sqsums[i] = diff.mlmclooper(condition_x,Nsamples,l)
+                sums[i],sqsums[i] = diff.netG.mlmclooper(condition_x,Nsamples,l)
 
             sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce     
             s=sqsums[:,0].shape
@@ -80,7 +79,7 @@ def Giles_plot(diff,acc):
         for i in range(len(acc)):
             e=acc[i]
             print(f'Performing mlmc for accuracy={e}')
-            sums,sqsums,N=diff.mlmc(e,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
+            sums,sqsums,N=diff.netG.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
             sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
             s=sqsums[:,0].shape
 
@@ -88,7 +87,7 @@ def Giles_plot(diff,acc):
             dividerN=N.clone() #add axes to N to broadcast correctly on division
             for i in range(len(sums.shape[1:])):
                 dividerN.unsqueeze_(-1)
-            this_sample_dir = os.path.join(diff.eval_dir, f"M_{M}_accuracy_{e}")
+            this_sample_dir = os.path.join(diff.netG.eval_dir, f"M_{M}_accuracy_{e}")
             
             if not os.path.exists(this_sample_dir):
                 os.mkdir(this_sample_dir)        

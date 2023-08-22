@@ -225,8 +225,7 @@ class GaussianDiffusion(nn.Module):
         return self.p_sample_loop(x_in, continous)
     
     @torch.no_grad()
-    def mlmc(self,accuracy,alpha_0=-1,beta_0=-1):
-        x_in=self.data['SR']
+    def mlmc(self,accuracy,x_in,alpha_0=-1,beta_0=-1):
         accsplit=np.sqrt(.5)
         #Orders of convergence
         alpha=max(0,alpha_0)
