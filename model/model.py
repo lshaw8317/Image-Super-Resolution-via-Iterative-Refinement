@@ -67,6 +67,17 @@ class DDPM(BaseModel):
                 self.SR = self.netG.super_resolution(
                     self.data['SR'], continous)
         self.netG.train()
+        
+    def mlmctest(self,continous=False):
+        self.netG.eval()
+        with torch.no_grad():
+            if isinstance(self.netG, nn.DataParallel):
+                self.SRmlmc = self.netG.module.mlmc(
+                    self.data['SR'], continous)
+            else:
+                self.SRmlmc = self.netG.mlmc(
+                    self.data['SR'], continous)
+        self.netG.train()
 
     def sample(self, batch_size=1, continous=False):
         self.netG.eval()
