@@ -8,4 +8,3 @@ opencv-python
 pillow
 tensorboardx
 wandb
-

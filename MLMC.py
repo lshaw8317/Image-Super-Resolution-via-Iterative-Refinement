@@ -111,8 +111,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str, default='config/sr_sr3_16_128.json',
                         help='JSON file for configuration')
-    parser.add_argument('-p', '--phase', type=str, choices=['train', 'val'],
-                        help='Run either train(training) or val(generation)', default='train')
+    parser.add_argument('-p', '--phase', type=str, choices=['val'],
+                        help='Run val(generation)', default='val')
     parser.add_argument('-gpu', '--gpu_ids', type=str, default=None)
     parser.add_argument('-debug', '-d', action='store_true')
     parser.add_argument('-enable_wandb', action='store_true')
@@ -147,12 +147,12 @@ if __name__ == "__main__":
     else:
         wandb_logger = None
 
-    # dataset
-    for phase, dataset_opt in opt['datasets'].items():
-        assert phase == 'val'
-        val_set = Data.create_dataset(dataset_opt, phase)
-        val_loader = Data.create_dataloader(
-            val_set, dataset_opt, phase)
+    # dataset phase == 'val'
+    phase=opt['phase']
+    assert phase=='val'
+    dataset_opt=opt['datasets'][phase]
+    val_set = Data.create_dataset(dataset_opt, phase)
+    val_loader = Data.create_dataloader(val_set, dataset_opt, phase)
     logger.info('Initial Dataset Finished')
 
     # model
