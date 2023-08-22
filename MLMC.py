@@ -161,7 +161,7 @@ if __name__ == "__main__":
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
     #Modify noise schedule to correspond to MLMC max L in diffusion
-    opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.M**diffusion.Lmax
+    opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.netG.M**diffusion.netG.Lmax
     
     diffusion.set_new_noise_schedule(
         opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
@@ -176,7 +176,7 @@ if __name__ == "__main__":
         idx += 1
         diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
         acc=[.1,.05,.01,.005]
-        Giles_plot(diffusion,acc)
+        Giles_plot(diffusion.netG,acc)
         visuals=OrderedDict()
         visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
         visuals['HR'] = diffusion.data['HR'].detach().float().cpu()
