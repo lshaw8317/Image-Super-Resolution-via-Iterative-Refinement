@@ -77,7 +77,7 @@ class GaussianDiffusion(nn.Module):
         channels=3,
         loss_type='l1',
         conditional=True,
-        schedule_opt=None
+        schedule_opt=None,**kwargs
     ):
         super().__init__()
         self.channels = channels
@@ -88,14 +88,15 @@ class GaussianDiffusion(nn.Module):
         if schedule_opt is not None:
             pass
             # self.set_new_noise_schedule(schedule_opt)
-        self.M=2
-        self.Lmax=11
-        self.min_l=3
-        self.mlmc_batch_size=128
-        self.N0=100
-        self.eval_dir='results/sr_sr3_16_128'
-        self.payoff = lambda samples: samples #default to identity payoff
+        self.M=kwargs.get('M')
+        self.Lmax=kwargs.get('Lmax')
+        self.min_l=kwargs.get('min_l')
+        self.mlmc_batch_size=kwargs.get('mlmc_batch_size')
+        self.N0=kwargs.get('N0')
+        self.eval_dir=kwargs.get('eval_dir')
+        self.payoff = kwargs.get('payoff') #default to identity payoff
 
+            
     def set_loss(self, device):
         if self.loss_type == 'l1':
             self.loss_func = nn.L1Loss(reduction='sum').to(device)
