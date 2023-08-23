@@ -309,11 +309,13 @@ class GaussianDiffusion(nn.Module):
 
     @torch.no_grad()
     def mlmcsample(self, condition_x, bs, l):
-        x = condition_x
         device=self.betas.device
+        x = condition_x[None,...].to(device) #add fake bs
         shape = x.shape
-        batch_size = x.shape[0]
-        img_f = torch.randn(shape, device=device)
+        print(f'condition_x shape={shape}')
+        batch_size = bs
+        img_f = torch.randn((bs,*shape), device=device)
+        print(f'img_f shape={img_f.shape}')
         img_c = img_f.clone().detach().to(device)
         alpha_c=torch.tensor([1.]).to(device)
         dWc=torch.zeros_like(x).to(device)

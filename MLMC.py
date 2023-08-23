@@ -164,6 +164,7 @@ if __name__ == "__main__":
     
     diffusion.set_new_noise_schedule(
         opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
+    print(f'Beta length = {len(diffusion.betas)}')
     logger.info('Begin Model Evaluation.')
     avg_psnr = 0.0
     avg_ssim = 0.0
