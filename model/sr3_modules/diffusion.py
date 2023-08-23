@@ -329,7 +329,7 @@ class GaussianDiffusion(nn.Module):
             noise_level = torch.FloatTensor(
                 [self.sqrt_alphas_cumprod_prev[current_timep1]]).repeat(batch_size, 1).to(img_f.device)
             
-            ftheta = self.denoise_fn(torch.cat([condition_x, img_f], dim=1), noise_level)
+            ftheta = self.denoise_fn(torch.cat([x, img_f], dim=1), noise_level)
             alpha_f=self.alphas_cumprod[current_time]/self.alphas_cumprod_prev[current_time]
             beta_f=1.-alpha_f
             model_mean = torch.sqrt(1./alpha_f)*(img_f-beta_f*ftheta/self.sqrt_one_minus_alphas_cumprod[current_time])
@@ -340,7 +340,7 @@ class GaussianDiffusion(nn.Module):
             alpha_c*=alpha_f
             dWc+=dWf*torch.sqrt(torch.tensor([1./self.M]).to(device))
             if t % self.M == 0:
-                ftheta = self.denoise_fn(torch.cat([condition_x, img_c], dim=1), noise_level)
+                ftheta = self.denoise_fn(torch.cat([x, img_c], dim=1), noise_level)
                 beta_c=(1.-alpha_c)
                 model_mean = torch.sqrt(1./alpha_c)*(img_c-beta_c*ftheta/self.sqrt_one_minus_alphas_cumprod[current_time])
                 noise = dWc*torch.sqrt(beta_c)
