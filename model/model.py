@@ -54,8 +54,8 @@ class DDPM(BaseModel):
         self.load_network()
         self.print_network()
         print(opt['diffusion'])
-        self.image_size=opt['diffusion']['image_size']
-        self.channels=opt['diffusion']['channels']
+        self.image_size=self.opt['model']['diffusion']['image_size']
+        self.channels=self.opt['model']['diffusion']['channels']
 
     def feed_data(self, data):
         self.data = self.set_device(data)
