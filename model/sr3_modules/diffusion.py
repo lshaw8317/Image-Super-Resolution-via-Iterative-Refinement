@@ -228,7 +228,6 @@ class GaussianDiffusion(nn.Module):
     @torch.no_grad()
     def mlmcsample(self, condition_x, bs, l):
         device=self.betas.device
-        print(device)
         shape = condition_x.shape
         filler=tuple([1 for i in range(len(shape[1:]))])        
         x = condition_x.repeat(bs,*filler).to(device)     
@@ -243,7 +242,7 @@ class GaussianDiffusion(nn.Module):
         coarsebetas=finebetas[::self.M]
         finenoise=torch.sqrt(torch.prod(1.-finebetas)).to(device)
         coarsenoise=torch.sqrt(torch.prod(1.-coarsebetas)).to(device)
-
+        print(coarsenoise,finenoise)
         for t in tqdm(reversed(range(0, numsteps)), desc='sampling loop time step', total=numsteps):
             noise_level = (finenoise).repeat(batch_size, 1).to(img_f.device)
         
@@ -253,18 +252,17 @@ class GaussianDiffusion(nn.Module):
 
             model_mean = torch.sqrt(1./alpha_f)*(img_f-beta_f*ftheta/torch.sqrt(1.-finenoise**2))
             dWf = torch.randn_like(x) if t > 0 else torch.zeros_like(x)
-            noise = dWf*torch.sqrt(beta_f)
-            img_f = model_mean + noise
+            img_f = model_mean + dWf*torch.sqrt(beta_f)
             
             finenoise/=torch.sqrt(alpha_f)
 
             dWc+=dWf*torch.sqrt(torch.tensor([1./self.M]).to(device))
             if t % self.M == 0:
+                noise_level = (coarsenoise).repeat(batch_size, 1).to(img_f.device)
                 ftheta = self.denoise_fn(torch.cat([x, img_c], dim=1), noise_level)
 
                 model_mean = torch.sqrt(1./alpha_f)*(img_c-beta_f*ftheta/torch.sqrt(1.-coarsenoise**2))
-                noise = dWc*torch.sqrt(beta_f)
-                img_c = model_mean + noise
+                img_c = model_mean + dWc*torch.sqrt(beta_f)
                 coarsenoise/=torch.sqrt(alpha_f)
 
             
