@@ -89,7 +89,7 @@ class DDPM(BaseModel):
         N0=self.N0
         Lmax=self.Lmax
         eval_dir = self.eval_dir
-        Nsamples=10**3
+        Nsamples=10**2
         condition_x=self.data['SR']
         min_l=self.min_l
         
