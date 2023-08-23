@@ -90,81 +90,82 @@ class DDPM(BaseModel):
         Nsamples=10**3
         condition_x=self.data['SR']
         min_l=self.min_l
-
-        #Variance and mean samples
-        sums,sqsums=self.netG.module.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
-        sums=torch.zeros((Lmax+1-min_l,*sums.shape))
-        sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape))
-        # Directory to save means and norms                                                                                               
-        this_sample_dir = os.path.join(eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
-        if not os.path.exists(this_sample_dir):
-            os.mkdir(this_sample_dir)
-            print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
-            for i,l in enumerate(range(min_l,Lmax+1)):
-                print(f'l={l}')
-                sums[i],sqsums[i] = self.netG.module.mlmclooper(condition_x,Nsamples,l)
-
-            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce     
-            s=sqsums[:,0].shape
-            means_dp=imagenorm(sums[:,0])/Nsamples
-            V_dp=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/Nsamples-means_dp**2  
-        
-            # Write samples to disk or Google Cloud Storage
-            with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
-                torch.save(sums/Nsamples,fout)
-            with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
-                torch.save(sqsums/Nsamples,fout)
-            with open(os.path.join(this_sample_dir, "Ls.pt"), "wb") as fout:
-                torch.save(torch.arange(min_l,Lmax+1,dtype=torch.int32),fout)
-            
-            #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
-            X=np.ones((Lmax-min_l,2))
-            X[:,0]=np.arange(min_l+1,Lmax+1)
-            a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
-            alpha = -a[0]/np.log(M)
-            b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
-            beta = -b[0]/np.log(M) 
-
-            print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
-            with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
-                f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={min_l}, Nsamples={Nsamples}, M={M}.\n')
-                f.write(f'Estimated alpha={alpha}\n Estimated beta={beta}')
-            with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
-                torch.save(torch.tensor([alpha,beta]),fout)
-                
-        with open(os.path.join(this_sample_dir, "alphabeta.pt"),'rb') as f:
-            temp=torch.load(f)
-            alpha=temp[0].item()
-            beta=temp[1].item()
-        
-        #Do the calculations and simulations for num levels and complexity plot
-        for i in range(len(acc)):
-            e=acc[i]
-            print(f'Performing mlmc for accuracy={e}')
-            sums,sqsums,N=self.netG.module.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
-            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
-            s=sqsums[:,0].shape
-
-            # Directory to save means, norms and N
-            dividerN=N.clone() #add axes to N to broadcast correctly on division
-            for i in range(len(sums.shape[1:])):
-                dividerN.unsqueeze_(-1)
-            this_sample_dir = os.path.join(eval_dir, f"M_{M}_accuracy_{e}")
-            
+        with torch.no_grad():
+    
+            #Variance and mean samples
+            sums,sqsums=self.netG.module.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
+            sums=torch.zeros((Lmax+1-min_l,*sums.shape))
+            sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape))
+            # Directory to save means and norms                                                                                               
+            this_sample_dir = os.path.join(eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
             if not os.path.exists(this_sample_dir):
-                os.mkdir(this_sample_dir)        
-            with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
-                torch.save(sums/dividerN,fout)
-            with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
-                torch.save(sqsums/dividerN,fout) #sums has shape (L,4,C,H,W) if img (L,4,2048) if activations
-            with open(os.path.join(this_sample_dir, "N.pt"), "wb") as fout:
-                torch.save(N,fout)
-
-            meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
-            meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
-            # Write samples to disk or Google Cloud Storage
-            with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
-                np.savez_compressed(fout, meanpayoff=meanimg)
+                os.mkdir(this_sample_dir)
+                print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
+                for i,l in enumerate(range(min_l,Lmax+1)):
+                    print(f'l={l}')
+                    sums[i],sqsums[i] = self.netG.module.mlmclooper(condition_x,Nsamples,l)
+    
+                sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce     
+                s=sqsums[:,0].shape
+                means_dp=imagenorm(sums[:,0])/Nsamples
+                V_dp=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/Nsamples-means_dp**2  
+            
+                # Write samples to disk or Google Cloud Storage
+                with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
+                    torch.save(sums/Nsamples,fout)
+                with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
+                    torch.save(sqsums/Nsamples,fout)
+                with open(os.path.join(this_sample_dir, "Ls.pt"), "wb") as fout:
+                    torch.save(torch.arange(min_l,Lmax+1,dtype=torch.int32),fout)
+                
+                #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
+                X=np.ones((Lmax-min_l,2))
+                X[:,0]=np.arange(min_l+1,Lmax+1)
+                a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
+                alpha = -a[0]/np.log(M)
+                b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
+                beta = -b[0]/np.log(M) 
+    
+                print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
+                with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
+                    f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={min_l}, Nsamples={Nsamples}, M={M}.\n')
+                    f.write(f'Estimated alpha={alpha}\n Estimated beta={beta}')
+                with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
+                    torch.save(torch.tensor([alpha,beta]),fout)
+                    
+            with open(os.path.join(this_sample_dir, "alphabeta.pt"),'rb') as f:
+                temp=torch.load(f)
+                alpha=temp[0].item()
+                beta=temp[1].item()
+            
+            #Do the calculations and simulations for num levels and complexity plot
+            for i in range(len(acc)):
+                e=acc[i]
+                print(f'Performing mlmc for accuracy={e}')
+                sums,sqsums,N=self.netG.module.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
+                sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
+                s=sqsums[:,0].shape
+    
+                # Directory to save means, norms and N
+                dividerN=N.clone() #add axes to N to broadcast correctly on division
+                for i in range(len(sums.shape[1:])):
+                    dividerN.unsqueeze_(-1)
+                this_sample_dir = os.path.join(eval_dir, f"M_{M}_accuracy_{e}")
+                
+                if not os.path.exists(this_sample_dir):
+                    os.mkdir(this_sample_dir)        
+                with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
+                    torch.save(sums/dividerN,fout)
+                with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
+                    torch.save(sqsums/dividerN,fout) #sums has shape (L,4,C,H,W) if img (L,4,2048) if activations
+                with open(os.path.join(this_sample_dir, "N.pt"), "wb") as fout:
+                    torch.save(N,fout)
+    
+                meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
+                meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
+                # Write samples to disk or Google Cloud Storage
+                with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
+                    np.savez_compressed(fout, meanpayoff=meanimg)
         self.netG.train()
 
         return None
