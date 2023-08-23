@@ -65,7 +65,7 @@ if __name__ == "__main__":
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
     #Modify noise schedule to correspond to MLMC max L in diffusion
-    opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.netG.module.M**diffusion.netG.module.Lmax
+    opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.netG.module.M**diffusion.netG.module.Lmax+1
     
     diffusion.set_new_noise_schedule(
         opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])

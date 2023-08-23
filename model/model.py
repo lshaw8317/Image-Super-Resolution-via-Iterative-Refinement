@@ -53,6 +53,8 @@ class DDPM(BaseModel):
             self.log_dict = OrderedDict()
         self.load_network()
         self.print_network()
+        self.image_size=self.opt['diffusion']['image_size'],
+        self.channels=self.opt['diffusion']['channels']
 
     def feed_data(self, data):
         self.data = self.set_device(data)
@@ -90,86 +92,216 @@ class DDPM(BaseModel):
         Nsamples=10**3
         condition_x=self.data['SR']
         min_l=self.min_l
-        with torch.no_grad():
-    
-            #Variance and mean samples
-            sums,sqsums=self.netG.module.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
-            sums=torch.zeros((Lmax+1-min_l,*sums.shape))
-            sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape))
-            # Directory to save means and norms                                                                                               
-            this_sample_dir = os.path.join(eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
+        
+        #Variance and mean samples
+        sums,sqsums=self.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
+        sums=torch.zeros((Lmax+1-min_l,*sums.shape))
+        sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape))
+        # Directory to save means and norms                                                                                               
+        this_sample_dir = os.path.join(eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
+        if not os.path.exists(this_sample_dir):
+            os.mkdir(this_sample_dir)
+            print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
+            for i,l in enumerate(range(min_l,Lmax+1)):
+                print(f'l={l}')
+                sums[i],sqsums[i] = self.mlmclooper(condition_x,Nsamples,l)
+
+            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce     
+            s=sqsums[:,0].shape
+            means_dp=imagenorm(sums[:,0])/Nsamples
+            V_dp=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/Nsamples-means_dp**2  
+        
+            # Write samples to disk or Google Cloud Storage
+            with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
+                torch.save(sums/Nsamples,fout)
+            with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
+                torch.save(sqsums/Nsamples,fout)
+            with open(os.path.join(this_sample_dir, "Ls.pt"), "wb") as fout:
+                torch.save(torch.arange(min_l,Lmax+1,dtype=torch.int32),fout)
+            
+            #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
+            X=np.ones((Lmax-min_l,2))
+            X[:,0]=np.arange(min_l+1,Lmax+1)
+            a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
+            alpha = -a[0]/np.log(M)
+            b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
+            beta = -b[0]/np.log(M) 
+
+            print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
+            with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
+                f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={min_l}, Nsamples={Nsamples}, M={M}.\n')
+                f.write(f'Estimated alpha={alpha}\n Estimated beta={beta}')
+            with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
+                torch.save(torch.tensor([alpha,beta]),fout)
+                
+        with open(os.path.join(this_sample_dir, "alphabeta.pt"),'rb') as f:
+            temp=torch.load(f)
+            alpha=temp[0].item()
+            beta=temp[1].item()
+        
+        #Do the calculations and simulations for num levels and complexity plot
+        for i in range(len(acc)):
+            e=acc[i]
+            print(f'Performing mlmc for accuracy={e}')
+            sums,sqsums,N=self.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
+            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
+            s=sqsums[:,0].shape
+
+            # Directory to save means, norms and N
+            dividerN=N.clone() #add axes to N to broadcast correctly on division
+            for i in range(len(sums.shape[1:])):
+                dividerN.unsqueeze_(-1)
+            this_sample_dir = os.path.join(eval_dir, f"M_{M}_accuracy_{e}")
+            
             if not os.path.exists(this_sample_dir):
-                os.mkdir(this_sample_dir)
-                print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
-                for i,l in enumerate(range(min_l,Lmax+1)):
-                    print(f'l={l}')
-                    sums[i],sqsums[i] = self.netG.module.mlmclooper(condition_x,Nsamples,l)
-    
-                sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce     
-                s=sqsums[:,0].shape
-                means_dp=imagenorm(sums[:,0])/Nsamples
-                V_dp=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/Nsamples-means_dp**2  
-            
-                # Write samples to disk or Google Cloud Storage
-                with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
-                    torch.save(sums/Nsamples,fout)
-                with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
-                    torch.save(sqsums/Nsamples,fout)
-                with open(os.path.join(this_sample_dir, "Ls.pt"), "wb") as fout:
-                    torch.save(torch.arange(min_l,Lmax+1,dtype=torch.int32),fout)
-                
-                #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
-                X=np.ones((Lmax-min_l,2))
-                X[:,0]=np.arange(min_l+1,Lmax+1)
-                a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
-                alpha = -a[0]/np.log(M)
-                b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
-                beta = -b[0]/np.log(M) 
-    
-                print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
-                with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
-                    f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={min_l}, Nsamples={Nsamples}, M={M}.\n')
-                    f.write(f'Estimated alpha={alpha}\n Estimated beta={beta}')
-                with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
-                    torch.save(torch.tensor([alpha,beta]),fout)
-                    
-            with open(os.path.join(this_sample_dir, "alphabeta.pt"),'rb') as f:
-                temp=torch.load(f)
-                alpha=temp[0].item()
-                beta=temp[1].item()
-            
-            #Do the calculations and simulations for num levels and complexity plot
-            for i in range(len(acc)):
-                e=acc[i]
-                print(f'Performing mlmc for accuracy={e}')
-                sums,sqsums,N=self.netG.module.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
-                sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
-                s=sqsums[:,0].shape
-    
-                # Directory to save means, norms and N
-                dividerN=N.clone() #add axes to N to broadcast correctly on division
-                for i in range(len(sums.shape[1:])):
-                    dividerN.unsqueeze_(-1)
-                this_sample_dir = os.path.join(eval_dir, f"M_{M}_accuracy_{e}")
-                
-                if not os.path.exists(this_sample_dir):
-                    os.mkdir(this_sample_dir)        
-                with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
-                    torch.save(sums/dividerN,fout)
-                with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
-                    torch.save(sqsums/dividerN,fout) #sums has shape (L,4,C,H,W) if img (L,4,2048) if activations
-                with open(os.path.join(this_sample_dir, "N.pt"), "wb") as fout:
-                    torch.save(N,fout)
-    
-                meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
-                meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
-                # Write samples to disk or Google Cloud Storage
-                with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
-                    np.savez_compressed(fout, meanpayoff=meanimg)
+                os.mkdir(this_sample_dir)        
+            with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
+                torch.save(sums/dividerN,fout)
+            with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
+                torch.save(sqsums/dividerN,fout) #sums has shape (L,4,C,H,W) if img (L,4,2048) if activations
+            with open(os.path.join(this_sample_dir, "N.pt"), "wb") as fout:
+                torch.save(N,fout)
+
+            meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
+            meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
+            # Write samples to disk or Google Cloud Storage
+            with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
+                np.savez_compressed(fout, meanpayoff=meanimg)
         self.netG.train()
 
         return None
 
+    def mlmc(self,accuracy,x_in,alpha_0=-1,beta_0=-1):
+        accsplit=np.sqrt(.5)
+        #Orders of convergence
+        alpha=max(0,alpha_0)
+        beta=max(0,beta_0)
+        M=self.M
+        N0=self.N0
+        Lmax=self.Lmax
+        min_l=self.min_l
+        L=min_l+2
+
+        mylen=L+1-min_l
+        V=torch.zeros(mylen) #Initialise variance vector of each levels' variance
+        N=torch.zeros(mylen) #Initialise num. samples vector of each levels' num. samples
+        dN=N0*torch.ones(mylen) #Initialise additional samples for this iteration vector for each level
+        sqrt_cost=torch.sqrt(2*M**(torch.arange(min_l,L+1,dtype=torch.float32)))
+        it0_ind=False
+        while (torch.sum(dN)>0): #Loop until no additional samples asked for
+            mylen=L+1-min_l
+            for i,l in enumerate(torch.arange(min_l,L+1)):
+                num=dN[i]
+                if num>0: #If asked for additional samples...
+                    tempsums,tempsqsums=self.mlmclooper(condition_x=x_in,Nl=int(num),l=l,min_l=min_l) #Call function which gives sums
+                    if not it0_ind:
+                        sums=torch.zeros((mylen,*tempsums.shape)) #Initialise sums array of unnormed [dX,Xf,Xc], each column is a level
+                        sqsums=torch.zeros((mylen,*tempsqsums.shape)) #Initialise sqsums array of normed [dX^2,Xf^2,Xc^2,XcXf], each column is a level
+                        it0_ind=True
+                    sqsums[i,...]+=tempsqsums
+                    sums[i,...]+=tempsums
+                    
+            N+=dN #Increment samples taken counter for each level
+            Yl=imagenorm(sums[:,0])/N
+            sumdims=tuple(range(1,len(sqsums[:,0].shape)))
+            s=sqsums[:,0].shape
+            V=torch.clip(
+                (torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/N-(Yl)**2
+                ,min=0) #Calculate variance based on updated samples
+            
+            ##Fix to deal with zero variance or mean by linear extrapolation
+            #Yl[2:]=torch.maximum(Yl[2:],.5*Yl[1:-1]*M**(-alpha))
+            #V[2:]=torch.maximum(V[2:],.5*V[1:-1]*M**(-beta))
+            
+            #Estimate order of weak convergence using LR
+            #Yl=(M^alpha-1)khl^alpha=(M^alpha-1)k(TM^-l)^alpha=((M^alpha-1)kT^alpha)M^(-l*alpha)
+            #=>log(Yl)=log(k(M^alpha-1)T^alpha)-alpha*l*log(M)
+            X=torch.ones((mylen-1,2))
+            X[:,0]=torch.arange(1,mylen)
+            a = torch.lstsq(torch.log(Yl[1:]),X)[0]
+            alpha_ = max(-a[0]/np.log(M),0.)
+            b = torch.lstsq(torch.log(V[1:]),X)[0]
+            beta_= -b[0]/np.log(M)
+            if alpha_0==-1:
+                alpha=alpha_
+            if beta_0==-1:
+                beta=beta_
+                
+            sqrt_V=torch.sqrt(V)
+            Nl_new=torch.ceil(((accsplit*accuracy)**-2)*torch.sum(sqrt_V*sqrt_cost)*(sqrt_V/sqrt_cost)) #Estimate optimal number of samples/level
+            dN=torch.clip(Nl_new-N,min=0) #Number of additional samples
+            print(f'Asking for {dN} new samples for l=[{min_l,L}]')
+            if torch.sum(dN > 0.01*N).item() == 0: #Almost converged
+                if max(Yl[-2]/(M**alpha),Yl[-1])>(M**alpha-1)*accuracy*np.sqrt(1-accsplit**2):
+                    L+=1
+                    print(f'Increased L to {L}')
+                    if (L>Lmax):
+                        print('Asked for an L greater than maximum allowed Lmax. Ending MLMC algorithm.')
+                        break
+                    #Add extra entries for the new level and estimate sums with N0 samples 
+                    V=torch.cat((V,V[-1]*M**(-beta)*torch.ones(1)), dim=0)
+                    sqrt_V=torch.sqrt(V)
+                    sqrt_cost=torch.cat((sqrt_cost,torch.tensor([2**(.5)*M**(L/2)])),dim=0)
+                    Nl_new=torch.ceil(((accsplit*accuracy)**-2)*torch.sum(sqrt_V*sqrt_cost)*(sqrt_V/sqrt_cost)) #Estimate optimal number of sample
+                    N=torch.cat((N,torch.tensor([0])),dim=0)
+                    dN=torch.clip(Nl_new-N,min=0) #Number of additional samples
+                    print(f'With new L, estimate of {dN} new samples for l=[{min_l,L}]')
+                    sums=torch.cat((sums,torch.zeros((1,*sums[0].shape))),dim=0)
+                    sqsums=torch.cat((sqsums,torch.zeros((1,*sqsums[0].shape))),dim=0)
+                    
+        print(f'Estimated alpha = {alpha_}')
+        print(f'Estimated beta = {beta_}')
+        return sums,sqsums,N
+    
+    def mlmclooper(self,condition_x,Nl,l,min_l=0):
+        eval_dir=self.eval_dir
+        num_sampling_rounds = Nl // self.mlmc_batch_size + 1
+        numrem=Nl % self.mlmc_batch_size
+        for r in range(num_sampling_rounds):
+            bs=numrem if r==num_sampling_rounds-1 else self.mlmc_batch_size
+            with torch.no_grad():
+                Xf,Xc=self.netG.module.mlmcsample(condition_x,bs,l) #should automatically use cuda
+            fine_payoff=self.payoff(Xf)
+            coarse_payoff=self.payoff(Xc)
+            if r==0:
+                sums=torch.zeros((3,*fine_payoff.shape[1:])) #skip batch_size
+                sqsums=torch.zeros((4,*fine_payoff.shape[1:]))
+            sumXf=torch.sum(fine_payoff,axis=0).to('cpu') #sum over batch size
+            sumXf2=torch.sum(fine_payoff**2,axis=0).to('cpu')
+            if l==min_l:
+                sqsums+=torch.stack([sumXf2,sumXf2,torch.zeros_like(sumXf2),torch.zeros_like(sumXf2)])
+                sums+=torch.stack([sumXf,sumXf,torch.zeros_like(sumXf)])
+            elif l<min_l:
+                raise ValueError("l must be at least min_l")
+            else:
+                dX_l=fine_payoff-coarse_payoff #Image difference
+                sumdX_l=torch.sum(dX_l,axis=0).to('cpu') #sum over batch size
+                sumdX_l2=torch.sum(dX_l**2,axis=0).to('cpu')
+                sumXc=torch.sum(coarse_payoff,axis=0).to('cpu')
+                sumXc2=torch.sum(coarse_payoff**2,axis=0).to('cpu')
+                sumXcXf=torch.sum(coarse_payoff*fine_payoff,axis=0).to('cpu')
+                sums+=torch.stack([sumdX_l,sumXf,sumXc])
+                sqsums+=torch.stack([sumdX_l2,sumXf2,sumXc2,sumXcXf])
+    
+        # Directory to save samples. Repeatedly overwrites, just to save some example samples for debugging
+        if l>min_l:
+            this_sample_dir = os.path.join(eval_dir, f"level_{l}")
+            if not os.path.exists(this_sample_dir):
+                os.mkdir(this_sample_dir)
+            samples_f=np.clip(Xf.permute(0, 2, 3, 1).cpu().numpy() * 255., 0, 255).astype(np.uint8)
+            samples_f = samples_f.reshape(
+                (-1, self.image_size, self.image_size, self.channels))
+            samples_c=np.clip(Xc.permute(0, 2, 3, 1).cpu().numpy() * 255., 0, 255).astype(np.uint8)
+            samples_c = samples_c.reshape(
+                (-1, self.image_size, self.image_size, self.channels))
+            with open(os.path.join(this_sample_dir, "samples_f.npz"), "wb") as fout:
+                np.savez_compressed(fout, samplesf=samples_f)
+            with open(os.path.join(this_sample_dir, "samples_c.npz"), "wb") as fout:
+                np.savez_compressed(fout, samplesc=samples_c)
+                                
+        return sums,sqsums 
+    
+    
     def sample(self, batch_size=1, continous=False):
         self.netG.eval()
         with torch.no_grad():
