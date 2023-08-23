@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import os
-from sr3_modules.diffusion import imagenorm
+from model.sr3_modules.diffusion import imagenorm
 import model.networks as networks
 from .base_model import BaseModel
 logger = logging.getLogger('base')
