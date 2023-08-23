@@ -310,12 +310,13 @@ class GaussianDiffusion(nn.Module):
     @torch.no_grad()
     def mlmcsample(self, condition_x, bs, l):
         x = condition_x
+        device=self.betas.device
         shape = x.shape
         batch_size = x.shape[0]
         img_f = torch.randn(shape, device=device)
-        img_c = img_f.clone()
-        alpha_c=torch.tensor([1.])
-        dWc=torch.zeros_like(x)
+        img_c = img_f.clone().detach().to(device)
+        alpha_c=torch.tensor([1.]).to(device)
+        dWc=torch.zeros_like(x).to(device)
         numsteps=self.M**l
         maxsteps=self.M**self.Lmax
         stepsize=maxsteps//numsteps
@@ -334,7 +335,7 @@ class GaussianDiffusion(nn.Module):
             img_f = model_mean + noise
             
             alpha_c*=alpha_f
-            dWc+=dWf*torch.sqrt(1./self.M)
+            dWc+=dWf*torch.sqrt(torch.tensor([1./self.M]).to(device))
             if t % self.M == 0:
                 ftheta = self.denoise_fn(torch.cat([condition_x, img_c], dim=1), noise_level)
                 beta_c=(1.-alpha_c)

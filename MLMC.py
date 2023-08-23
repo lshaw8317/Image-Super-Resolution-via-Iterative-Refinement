@@ -30,9 +30,9 @@ def Giles_plot(diff,acc):
         min_l=diff.netG.min_l
 
         #Variance and mean samples
-        sums,sqsums,_=diff.netG.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
-        sums=torch.zeros((Lmax+1-min_l,*sums.shape[1:]))
-        sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape[1:]))
+        sums,sqsums=diff.netG.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
+        sums=torch.zeros((Lmax+1-min_l,*sums.shape))
+        sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape))
         # Directory to save means and norms                                                                                               
         this_sample_dir = os.path.join(diff.netG.eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
         if not os.path.exists(this_sample_dir):
@@ -64,7 +64,7 @@ def Giles_plot(diff,acc):
             beta = -b[0]/np.log(M) 
 
             print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
-            with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'wb') as f:
+            with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
                 f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={min_l}, Nsamples={Nsamples}, M={M}.\n')
                 f.write(f'Estimated alpha={alpha}\n Estimated beta={beta}')
             with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
@@ -168,14 +168,14 @@ if __name__ == "__main__":
     avg_psnr = 0.0
     avg_ssim = 0.0
     idx = 0
-    result_path = diffusion.eval_dir
+    result_path = diffusion.netG.eval_dir
     os.makedirs(result_path, exist_ok=True)
     for _,  val_data in enumerate(val_loader):
         #val_data automatically has batch size 1 for phase=val
         idx += 1
         diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
         acc=[.1,.05,.01,.005]
-        Giles_plot(diffusion.netG,acc)
+        Giles_plot(diffusion,acc)
         visuals=OrderedDict()
         visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
         visuals['HR'] = diffusion.data['HR'].detach().float().cpu()
@@ -192,4 +192,5 @@ if __name__ == "__main__":
             lr_img, '{}/lr.png'.format(result_path))
         Metrics.save_img(
             fake_img, '{}/inf.png'.format(result_path))
-
+        if idx>0:
+            break
