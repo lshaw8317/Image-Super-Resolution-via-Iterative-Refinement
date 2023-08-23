@@ -53,8 +53,8 @@ class DDPM(BaseModel):
             self.log_dict = OrderedDict()
         self.load_network()
         self.print_network()
-        self.image_size=self.opt['diffusion']['image_size'],
-        self.channels=self.opt['diffusion']['channels']
+        self.image_size=opt['diffusion']['image_size'],
+        self.channels=opt['diffusion']['channels']
 
     def feed_data(self, data):
         self.data = self.set_device(data)
