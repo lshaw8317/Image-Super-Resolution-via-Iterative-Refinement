@@ -2,9 +2,8 @@
     "name": "sr_ffhq",
     "phase": "train", // train or val
     "gpu_ids": [
-        0
+        0,1,2,3
     ],
-    "distributed":[0],
     "path": { //set the path
         "log": "logs",
         "tb_logger": "tb_logger",
