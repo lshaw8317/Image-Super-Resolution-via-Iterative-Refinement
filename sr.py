@@ -77,6 +77,8 @@ if __name__ == "__main__":
 
     diffusion.set_new_noise_schedule(
         opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
+    
+    print(f'Max noise = {diffusion.netG.module.sqrt_alphas_cumprod[-1]}')
     if opt['phase'] == 'train':
         while current_step < n_iter:
             current_epoch += 1
