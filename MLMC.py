@@ -64,12 +64,12 @@ if __name__ == "__main__":
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
+    
     #Modify noise schedule to correspond to MLMC max L in diffusion
     opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.M**diffusion.Lmax
-    
     diffusion.set_new_noise_schedule(
         opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
-    print(f'Beta length = {len(diffusion.netG.module.betas)}')
+
     logger.info('Begin Model Evaluation.')
     avg_psnr = 0.0
     avg_ssim = 0.0

@@ -240,8 +240,9 @@ class GaussianDiffusion(nn.Module):
         maxsteps=self.M**self.Lmax #want to do a step for 0,1,2...,M**L-1
         stepsize=maxsteps//numsteps
         coarse_time=maxsteps-1
-        
+        counter=0
         for t in tqdm(reversed(range(-1, maxsteps, stepsize)), desc='sampling loop time step', total=numsteps):
+            counter+=1
             if t==-1:
                 break
             noise_level = torch.FloatTensor(
@@ -261,7 +262,7 @@ class GaussianDiffusion(nn.Module):
             
             alpha_c*=alpha_f
             dWc+=dWf*torch.sqrt(torch.tensor([1./self.M]).to(device))
-            if t % self.M == 0:
+            if counter % self.M == 0:
                 noise_level = torch.FloatTensor(
                     [self.sqrt_alphas_cumprod[coarse_time]]).repeat(batch_size, 1).to(img_f.device)
                 
@@ -273,6 +274,7 @@ class GaussianDiffusion(nn.Module):
                 alpha_c=torch.tensor([1.]).to(device)
                 dWc=torch.zeros_like(x).to(device)
                 coarse_time=t
+                counter=0
             
         return img_f,img_c
         
