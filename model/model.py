@@ -18,7 +18,7 @@ class DDPM(BaseModel):
         self.Lmax=11
         self.min_l=3
         self.mlmc_batch_size=64
-        self.N0=10
+        self.N0=100
         self.eval_dir='results/sr_sr3_16_128'
         self.payoff = lambda samples: samples #default to identity payoff
         kwargs={'M':self.M,'Lmax':self.Lmax,'min_l':self.min_l,
@@ -53,7 +53,6 @@ class DDPM(BaseModel):
             self.log_dict = OrderedDict()
         self.load_network()
         self.print_network()
-        print(opt['diffusion'])
         self.image_size=self.opt['model']['diffusion']['image_size']
         self.channels=self.opt['model']['diffusion']['channels']
 
@@ -90,7 +89,7 @@ class DDPM(BaseModel):
         N0=self.N0
         Lmax=self.Lmax
         eval_dir = self.eval_dir
-        Nsamples=10**2
+        Nsamples=10
         condition_x=self.data['SR']
         min_l=self.min_l
         
@@ -106,9 +105,9 @@ class DDPM(BaseModel):
             for i,l in enumerate(range(min_l,Lmax+1)):
                 print(f'l={l}')
                 sums[i],sqsums[i] = self.mlmclooper(condition_x,Nsamples,l)
-
-            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce     
+            
             s=sqsums[:,0].shape
+            sumdims=tuple(range(1,len(s))) #sqsums is output of payoff element-wise squared, so reduce     
             means_dp=imagenorm(sums[:,0])/Nsamples
             V_dp=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/Nsamples-means_dp**2  
         
