@@ -239,7 +239,7 @@ class GaussianDiffusion(nn.Module):
         numsteps=int(self.M**l)
         maxsteps=self.M**self.Lmax #want to do a step for 0,1,2...,M**L-1
         stepsize=maxsteps//numsteps
-        coarse_time=maxsteps
+        coarse_time=maxsteps-1
         
         for t in tqdm(reversed(range(-1, maxsteps, stepsize)), desc='sampling loop time step', total=numsteps):
             if t==-1:
