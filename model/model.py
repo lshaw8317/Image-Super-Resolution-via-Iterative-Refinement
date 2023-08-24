@@ -16,7 +16,7 @@ class DDPM(BaseModel):
         
         self.M=2
         self.Lmax=11
-        self.min_l=3
+        self.min_l=1
         self.mlmc_batch_size=64
         self.N0=100
         self.eval_dir='results/sr_sr3_16_128'
@@ -259,6 +259,8 @@ class DDPM(BaseModel):
         numrem=Nl % self.mlmc_batch_size
         for r in range(num_sampling_rounds):
             bs=numrem if r==num_sampling_rounds-1 else self.mlmc_batch_size
+            if bs==0:
+                break
             with torch.no_grad():
                 Xf,Xc=self.netG.module.mlmcsample(condition_x,bs,l) #should automatically use cuda
             fine_payoff=self.payoff(Xf)
