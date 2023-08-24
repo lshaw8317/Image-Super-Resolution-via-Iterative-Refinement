@@ -218,9 +218,9 @@ class DDPM(BaseModel):
             #=>log(Yl)=log(k(M^alpha-1)T^alpha)-alpha*l*log(M)
             X=torch.ones((mylen-1,2))
             X[:,0]=torch.arange(1,mylen)
-            a = torch.linalg.lstsq(torch.log(Yl[1:]),X)[0]
+            a = torch.linalg.lstsq(X,torch.log(Yl[1:]))[0]
             alpha_ = max(-a[0]/np.log(M),0.)
-            b = torch.linalg.lstsq(torch.log(V[1:]),X)[0]
+            b = torch.linalg.lstsq(X,torch.log(V[1:]))[0]
             beta_= -b[0]/np.log(M)
             if alpha_0==-1:
                 alpha=alpha_
