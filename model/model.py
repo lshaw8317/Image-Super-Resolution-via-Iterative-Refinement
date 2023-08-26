@@ -16,7 +16,7 @@ class DDPM(BaseModel):
         
         self.M=2
         self.Lmax=11
-        self.min_l=1
+        self.min_l=3
         self.mlmc_batch_size=64
         self.N0=100
         self.eval_dir='results/sr_sr3_16_128'
@@ -89,7 +89,7 @@ class DDPM(BaseModel):
         N0=self.N0
         Lmax=self.Lmax
         eval_dir = self.eval_dir
-        Nsamples=10
+        Nsamples=1000
         condition_x=self.data['SR']
         min_l=self.min_l
         
