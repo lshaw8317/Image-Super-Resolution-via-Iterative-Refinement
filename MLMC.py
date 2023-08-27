@@ -6,6 +6,7 @@ import logging
 import core.logger as Logger
 import core.metrics as Metrics
 from core.wandb_logger import WandbLogger
+import tensorflow as tf
 from tensorboardX import SummaryWriter
 import os
 import numpy as np
@@ -74,13 +75,13 @@ if __name__ == "__main__":
     avg_psnr = 0.0
     avg_ssim = 0.0
     idx = 0
-    result_path = diffusion.netG.module.eval_dir
+    result_path = diffusion.eval_dir
     os.makedirs(result_path, exist_ok=True)
     for _,  val_data in enumerate(val_loader):
         #val_data automatically has batch size 1 for phase=val
         idx += 1
         diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
-        acc=[.1,.05,.01,.005]
+        acc=[.1,.05,.01,.005,.001]
         diffusion.Giles_plot(acc)
         visuals=OrderedDict()
         visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
