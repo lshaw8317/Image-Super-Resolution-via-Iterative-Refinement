@@ -7,7 +7,7 @@ class BaseModel():
     def __init__(self, opt):
         self.opt = opt
         self.device = torch.device(
-            'cuda:0' if opt['gpu_ids'] is not None else 'cpu')
+            'cuda' if opt['gpu_ids'] is not None else 'cpu')
         self.begin_step = 0
         self.begin_epoch = 0
 

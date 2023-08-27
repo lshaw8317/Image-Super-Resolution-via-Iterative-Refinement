@@ -249,10 +249,10 @@ class GaussianDiffusion(nn.Module):
                 [self.sqrt_alphas_cumprod[t]]).repeat(batch_size, 1).to(img_f.device)
             ftheta = self.denoise_fn(torch.cat([x, img_f], dim=1), noise_level)
             if t-stepsize> 0:
-                dWf = torch.randn_like(x)
+                dWf = torch.randn_like(img_f)
                 divider = self.alphas_cumprod[t-stepsize] 
             else:
-                dWf = torch.zeros_like(x)
+                dWf = torch.zeros_like(img_f)
                 divider= torch.ones_like(self.alphas_cumprod[t])
             alpha_f = self.alphas_cumprod[t]/divider
             beta_f=1.-alpha_f

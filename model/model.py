@@ -90,7 +90,7 @@ class DDPM(BaseModel):
         Lmax=self.Lmax
         eval_dir = self.eval_dir
         Nsamples=1000
-        condition_x=self.data['SR']
+        condition_x=self.data['SR'].to(self.device)
         min_l=self.min_l
         
         #Variance and mean samples

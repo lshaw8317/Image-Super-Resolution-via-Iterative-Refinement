@@ -6,7 +6,6 @@ import logging
 import core.logger as Logger
 import core.metrics as Metrics
 from core.wandb_logger import WandbLogger
-import tensorflow as tf
 from tensorboardX import SummaryWriter
 import os
 import numpy as np
