@@ -262,7 +262,7 @@ class DDPM(BaseModel):
             if bs==0:
                 break
             with torch.no_grad():
-                Xf,Xc=self.netG.mlmcsample(condition_x,bs,l) #should automatically use cuda
+                Xf,Xc=self.netG.module.mlmcsample(condition_x,bs,l) #should automatically use cuda
             fine_payoff=self.payoff(Xf)
             coarse_payoff=self.payoff(Xc)
             if r==0:
