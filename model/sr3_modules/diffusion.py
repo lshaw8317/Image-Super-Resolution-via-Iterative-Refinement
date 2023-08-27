@@ -272,7 +272,7 @@ class GaussianDiffusion(nn.Module):
                 noise = dWc*torch.sqrt(beta_c)
                 img_c = model_mean + noise
                 alpha_c=torch.tensor([1.]).to(device)
-                dWc=torch.zeros_like(img_f).to(device)
+                dWc=torch.zeros_like(img_c).to(device)
                 coarse_time=t
                 counter=0
             
