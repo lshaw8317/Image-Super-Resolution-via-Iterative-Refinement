@@ -19,7 +19,6 @@ if __name__ == "__main__":
                         help='Run val(generation)', default='val')
     parser.add_argument('-gpu', '--gpu_ids', type=str, default=None)
     parser.add_argument('-acc', '--accuracy', type=float, default=None)
-    parser.add_argument('-eval_dir', '--eval_dir', type=str, default=None)
     parser.add_argument('-debug', '-d', action='store_true')
     parser.add_argument('-enable_wandb', action='store_true')
     parser.add_argument('-log_wandb_ckpt', action='store_true')
