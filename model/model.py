@@ -3,6 +3,7 @@ from collections import OrderedDict
 import numpy as np
 import torch
 import torch.nn as nn
+import core.metrics as Metrics
 import os
 from model.sr3_modules.diffusion import imagenorm
 import model.networks as networks
@@ -163,7 +164,7 @@ class DDPM(BaseModel):
                 torch.save(N,fout)
 
             meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
-            meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
+            meanimg=Metrics.tensor2img(meanimg)
             # Write samples to disk or Google Cloud Storage
             with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
                 np.savez_compressed(fout, meanpayoff=meanimg)
@@ -290,12 +291,8 @@ class DDPM(BaseModel):
             this_sample_dir = os.path.join(eval_dir, f"level_{l}")
             if not os.path.exists(this_sample_dir):
                 os.mkdir(this_sample_dir)
-            samples_f=np.clip(Xf.permute(0, 2, 3, 1).cpu().numpy() * 255., 0, 255).astype(np.uint8)
-            samples_f = samples_f.reshape(
-                (-1, self.image_size, self.image_size, self.channels))
-            samples_c=np.clip(Xc.permute(0, 2, 3, 1).cpu().numpy() * 255., 0, 255).astype(np.uint8)
-            samples_c = samples_c.reshape(
-                (-1, self.image_size, self.image_size, self.channels))
+            samples_f=Metrics.tensor2img(Xf)
+            samples_c=Metrics.tensor2img(Xc)            
             with open(os.path.join(this_sample_dir, "samples_f.npz"), "wb") as fout:
                 np.savez_compressed(fout, samplesf=samples_f)
             with open(os.path.join(this_sample_dir, "samples_c.npz"), "wb") as fout:
