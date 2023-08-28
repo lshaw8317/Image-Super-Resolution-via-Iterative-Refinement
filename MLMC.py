@@ -62,7 +62,7 @@ if __name__ == "__main__":
     logger.info('Initial Dataset Finished')
 
     # model
-    diffusion = Model.create_model(opt,args.eval_dir)
+    diffusion = Model.create_model(opt)
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
