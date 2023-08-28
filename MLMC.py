@@ -19,6 +19,7 @@ if __name__ == "__main__":
                         help='Run val(generation)', default='val')
     parser.add_argument('-gpu', '--gpu_ids', type=str, default=None)
     parser.add_argument('-acc', '--accuracy', type=float, default=None)
+    parser.add_argument('-eval_dir', '--eval_dir', type=str, default=None)
     parser.add_argument('-debug', '-d', action='store_true')
     parser.add_argument('-enable_wandb', action='store_true')
     parser.add_argument('-log_wandb_ckpt', action='store_true')
@@ -62,6 +63,7 @@ if __name__ == "__main__":
 
     # model
     diffusion = Model.create_model(opt)
+    diffusion.eval_dir=args.eval_dir
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
@@ -77,7 +79,7 @@ if __name__ == "__main__":
     idx = 0
     result_path = diffusion.eval_dir
     os.makedirs(result_path, exist_ok=True)
-    acc=[args.acc]
+    acc=[args.accuracy]
     for _,  val_data in enumerate(val_loader):
         #val_data automatically has batch size 1 for phase=val
         idx += 1
