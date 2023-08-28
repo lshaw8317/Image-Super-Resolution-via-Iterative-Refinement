@@ -20,7 +20,7 @@ class DDPM(BaseModel):
         self.min_l=3
         self.mlmc_batch_size=64
         self.N0=100
-        self.eval_dir=opt['eval_dir']
+        self.eval_dir=None
         self.payoff = lambda samples: samples #default to identity payoff
         kwargs={'M':self.M,'Lmax':self.Lmax,'min_l':self.min_l,
                 'mlmc_batch_size':self.mlmc_batch_size,'N0':self.N0,
