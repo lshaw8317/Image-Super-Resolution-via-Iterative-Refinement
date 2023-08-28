@@ -1,5 +1,5 @@
 {
-    "name": "sr_ffhq",
+    "name": "sr_sr3_16_128",
     "phase": "train", // train or val
     "gpu_ids": [
         0,1,2,3
