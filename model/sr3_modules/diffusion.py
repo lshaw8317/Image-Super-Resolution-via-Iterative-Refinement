@@ -16,6 +16,10 @@ def imagenorm(img):
     n/=np.sqrt(np.prod(s[1:]))
     return n
 
+def inverse_scaler(img):
+    # Rescale [-1, 1] to [0, 1]
+    return (img + 1.) / 2.
+
 def _warmup_beta(linear_start, linear_end, n_timestep, warmup_frac):
     betas = linear_end * np.ones(n_timestep, dtype=np.float64)
     warmup_time = int(n_timestep * warmup_frac)
@@ -276,7 +280,7 @@ class GaussianDiffusion(nn.Module):
                 coarse_time=t
                 counter=0
             
-        return img_f,img_c
+        return inverse_scaler(img_f),inverse_scaler(img_c)
         
     def q_sample(self, x_start, continuous_sqrt_alpha_cumprod, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
