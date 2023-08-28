@@ -12,7 +12,7 @@ logger = logging.getLogger('base')
 
 
 class DDPM(BaseModel):
-    def __init__(self, opt):
+    def __init__(self, opt,eval_dir):
         super(DDPM, self).__init__(opt)
         
         self.M=2
@@ -20,7 +20,7 @@ class DDPM(BaseModel):
         self.min_l=3
         self.mlmc_batch_size=64
         self.N0=100
-        self.eval_dir=None
+        self.eval_dir=eval_dir
         self.payoff = lambda samples: samples #default to identity payoff
         kwargs={'M':self.M,'Lmax':self.Lmax,'min_l':self.min_l,
                 'mlmc_batch_size':self.mlmc_batch_size,'N0':self.N0,
