@@ -18,6 +18,7 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--phase', type=str, choices=['val'],
                         help='Run val(generation)', default='val')
     parser.add_argument('-gpu', '--gpu_ids', type=str, default=None)
+    parser.add_argument('-acc', '--accuracy', type=float, default=None)
     parser.add_argument('-debug', '-d', action='store_true')
     parser.add_argument('-enable_wandb', action='store_true')
     parser.add_argument('-log_wandb_ckpt', action='store_true')
@@ -76,11 +77,11 @@ if __name__ == "__main__":
     idx = 0
     result_path = diffusion.eval_dir
     os.makedirs(result_path, exist_ok=True)
+    acc=[args.acc]
     for _,  val_data in enumerate(val_loader):
         #val_data automatically has batch size 1 for phase=val
         idx += 1
         diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
-        acc=[.1,.05,.01,.005,.001]
         diffusion.Giles_plot(acc)
         visuals=OrderedDict()
         visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
