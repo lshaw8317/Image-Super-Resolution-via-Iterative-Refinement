@@ -230,7 +230,7 @@ class GaussianDiffusion(nn.Module):
         return self.p_sample_loop(x_in, continous)
 
     @torch.no_grad()
-    def forward(self, condition_x, bs, l):
+    def mlmcsample(self, condition_x, bs, l):
         device=self.betas.device
         shape = condition_x.shape
         filler=tuple([1 for i in range(len(shape[1:]))])        
