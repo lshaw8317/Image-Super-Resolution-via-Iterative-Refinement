@@ -99,6 +99,11 @@ def define_G(opt,**kwargs):
         dropout=model_opt['unet']['dropout'],
         image_size=model_opt['diffusion']['image_size']
     )
+    if opt['gpu_ids'] and opt['distributed']:
+        assert torch.cuda.is_available()
+        model = nn.DataParallel(model)
+        model.to(torch.device('cuda'))
+    
     netG = diffusion.GaussianDiffusion(
         model,
         image_size=model_opt['diffusion']['image_size'],
@@ -111,7 +116,5 @@ def define_G(opt,**kwargs):
     if opt['phase'] == 'train':
         # init_weights(netG, init_type='kaiming', scale=0.1)
         init_weights(netG, init_type='orthogonal')
-    if opt['gpu_ids'] and opt['distributed']:
-        assert torch.cuda.is_available()
-        netG = nn.DataParallel(netG)
+    
     return netG
