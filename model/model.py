@@ -22,8 +22,10 @@ class DDPM(BaseModel):
         self.N0=100
         self.eval_dir=opt['path']['experiments_root']
         if opt['payoff']=='mean':
+            print("mean payoff selected.")
             self.payoff = lambda samples: samples #default to identity payoff
         elif opt['payoff']=='second_moment':
+            print("second_moment payoff selected.")
             self.payoff = lambda samples: samples**2 #variance/second moment payoff
         else:
             print("opt['payoff'] not recognised. Defaulting to mean calculation.")
