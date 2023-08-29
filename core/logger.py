@@ -35,7 +35,7 @@ def parse(args):
     if args.debug:
         opt['name'] = 'debug_{}'.format(opt['name'])
     experiments_root = os.path.join(
-        'results', '{}'.format(opt['name']))
+        'results', '{}_{}'.format(opt['name'],opt['payoff']))
     opt['path']['experiments_root'] = experiments_root
     for key, path in opt['path'].items():
         if 'resume' not in key and 'experiments' not in key:

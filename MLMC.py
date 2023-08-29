@@ -62,7 +62,6 @@ if __name__ == "__main__":
     logger.info('Initial Dataset Finished')
 
     # model
-    opt['payoff']=args.payoff
     diffusion = Model.create_model(opt)
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
