@@ -21,7 +21,13 @@ class DDPM(BaseModel):
         self.mlmc_batch_size=64
         self.N0=100
         self.eval_dir=opt['path']['experiments_root']
-        self.payoff = lambda samples: samples #default to identity payoff
+        if opt['payoff']=='mean':
+            self.payoff = lambda samples: samples #default to identity payoff
+        elif opt['payoff']=='second_moment':
+            self.payoff = lambda samples: samples**2 #variance/second moment payoff
+        else:
+            print("opt['payoff'] not recognised. Defaulting to mean calculation.")
+            self.payoff = lambda samples: samples
         kwargs={'M':self.M,'Lmax':self.Lmax,'min_l':self.min_l,
                 'mlmc_batch_size':self.mlmc_batch_size,'N0':self.N0,
                 'eval_dir':self.eval_dir,'payoff':self.payoff}

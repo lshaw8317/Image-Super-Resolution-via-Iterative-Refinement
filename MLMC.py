@@ -20,6 +20,7 @@ if __name__ == "__main__":
     parser.add_argument('-gpu', '--gpu_ids', type=str, default=None)
     parser.add_argument('-acc', '--accuracy', type=float, default=None)
     parser.add_argument('-debug', '-d', action='store_true')
+    parser.add_argument('-payoff', '--payoff', type=str, choices =['mean','second_moment'])
     parser.add_argument('-enable_wandb', action='store_true')
     parser.add_argument('-log_wandb_ckpt', action='store_true')
     parser.add_argument('-log_eval', action='store_true')
@@ -61,6 +62,7 @@ if __name__ == "__main__":
     logger.info('Initial Dataset Finished')
 
     # model
+    opt['payoff']=args.payoff
     diffusion = Model.create_model(opt)
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
