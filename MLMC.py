@@ -12,6 +12,7 @@ import numpy as np
 from collections import OrderedDict
 
 if __name__ == "__main__":
+    MCSAMPLES=1e6
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str, default='config/sr_sr3_16_128.json',
                         help='JSON file for configuration')
@@ -20,10 +21,11 @@ if __name__ == "__main__":
     parser.add_argument('-gpu', '--gpu_ids', type=str, default=None)
     parser.add_argument('-acc', '--accuracy', type=float, default=None)
     parser.add_argument('-debug', '-d', action='store_true')
-    parser.add_argument('-payoff', '--payoff', type=str, choices =['mean','second_moment'])
+    parser.add_argument('-payoff', '--payoff', type=str, choices =['mean','second_moment'], default='mean')
     parser.add_argument('-enable_wandb', action='store_true')
     parser.add_argument('-log_wandb_ckpt', action='store_true')
     parser.add_argument('-log_eval', action='store_true')
+    parser.add_argument('-mode', type=str, choices=['MLMC','MC'])
 
     # parse configs
     args = parser.parse_args()
@@ -78,27 +80,53 @@ if __name__ == "__main__":
     idx = 0
     result_path = diffusion.eval_dir
     os.makedirs(result_path, exist_ok=True)
-    acc=[args.accuracy]
-    for _,  val_data in enumerate(val_loader):
-        #val_data automatically has batch size 1 for phase=val
-        idx += 1
-        diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
-        diffusion.Giles_plot(acc)
-        visuals=OrderedDict()
-        visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
-        visuals['HR'] = diffusion.data['HR'].detach().float().cpu()
-        if 'LR' in diffusion.data:
-            visuals['LR'] = diffusion.data['LR'].detach().float().cpu()
+    if args.mode=='MLMC':
+        acc=[args.accuracy]
+        for _,  val_data in enumerate(val_loader):
+            #val_data automatically has batch size 1 for phase=val
+            idx += 1
+            diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
+            diffusion.Giles_plot(acc)
+            visuals=OrderedDict()
+            visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
+            visuals['HR'] = diffusion.data['HR'].detach().float().cpu()
+            if 'LR' in diffusion.data:
+                visuals['LR'] = diffusion.data['LR'].detach().float().cpu()
+    
+            hr_img = Metrics.tensor2img(visuals['HR'])  # uint8
+            lr_img = Metrics.tensor2img(visuals['LR'])  # uint8
+            fake_img = Metrics.tensor2img(visuals['INF'])  # uint8
+    
+            Metrics.save_img(
+                hr_img, '{}/hr.png'.format(result_path))
+            Metrics.save_img(
+                lr_img, '{}/lr.png'.format(result_path))
+            Metrics.save_img(
+                fake_img, '{}/inf.png'.format(result_path))
+            if idx>0:
+                break
+    else:#args.mode=='MC'
+        for _,  val_data in enumerate(val_loader):
+            #val_data automatically has batch size 1 for phase=val
+            idx += 1
+            diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
+            diffusion.mc(MCSAMPLES)
+            visuals=OrderedDict()
+            visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
+            visuals['HR'] = diffusion.data['HR'].detach().float().cpu()
+            if 'LR' in diffusion.data:
+                visuals['LR'] = diffusion.data['LR'].detach().float().cpu()
+    
+            hr_img = Metrics.tensor2img(visuals['HR'])  # uint8
+            lr_img = Metrics.tensor2img(visuals['LR'])  # uint8
+            fake_img = Metrics.tensor2img(visuals['INF'])  # uint8
+    
+            Metrics.save_img(
+                hr_img, '{}/hr.png'.format(result_path))
+            Metrics.save_img(
+                lr_img, '{}/lr.png'.format(result_path))
+            Metrics.save_img(
+                fake_img, '{}/inf.png'.format(result_path))
+            if idx>0:
+                break
 
-        hr_img = Metrics.tensor2img(visuals['HR'])  # uint8
-        lr_img = Metrics.tensor2img(visuals['LR'])  # uint8
-        fake_img = Metrics.tensor2img(visuals['INF'])  # uint8
-
-        Metrics.save_img(
-            hr_img, '{}/hr.png'.format(result_path))
-        Metrics.save_img(
-            lr_img, '{}/lr.png'.format(result_path))
-        Metrics.save_img(
-            fake_img, '{}/inf.png'.format(result_path))
-        if idx>0:
-            break

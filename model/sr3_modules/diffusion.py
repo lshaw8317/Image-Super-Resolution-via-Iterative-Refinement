@@ -98,8 +98,7 @@ class GaussianDiffusion(nn.Module):
         self.mlmc_batch_size=kwargs.get('mlmc_batch_size')
         self.N0=kwargs.get('N0')
         self.eval_dir=kwargs.get('eval_dir')
-        self.payoff = kwargs.get('payoff') #default to identity payoff
-
+        self.payoff = kwargs.get('payoff') 
             
     def set_loss(self, device):
         if self.loss_type == 'l1':
@@ -228,7 +227,14 @@ class GaussianDiffusion(nn.Module):
     @torch.no_grad()
     def super_resolution(self, x_in, continous=False):
         return self.p_sample_loop(x_in, continous)
-
+    
+    @torch.no_grad()
+    def mcsample(self, x_in, bs, continous=False):
+        shape = x_in.shape
+        filler=tuple([1 for i in range(len(shape[1:]))])        
+        x = x_in.repeat(bs,*filler).to(device) 
+        return self.p_sample_loop(x, continous)
+    
     @torch.no_grad()
     def mlmcsample(self, condition_x, bs, l):
         device=self.betas.device

@@ -35,8 +35,12 @@ def parse(args):
     # set log directory
     if args.debug:
         opt['name'] = 'debug_{}'.format(opt['name'])
-    experiments_root = os.path.join(
+    if args.mode=='MLMC':
+        experiments_root = os.path.join(
         'results', '{}_{}'.format(opt['name'],opt['payoff']))
+    else: #args.mode==MC
+        experiments_root = os.path.join(
+        'results', '{}_{}'.format(opt['name'],args.mode))
     opt['path']['experiments_root'] = experiments_root
     for key, path in opt['path'].items():
         if 'resume' not in key and 'experiments' not in key:
