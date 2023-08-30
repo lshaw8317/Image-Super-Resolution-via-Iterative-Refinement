@@ -195,7 +195,7 @@ class DDPM(BaseModel):
         V=torch.zeros(mylen) #Initialise variance vector of each levels' variance
         N=torch.zeros(mylen) #Initialise num. samples vector of each levels' num. samples
         dN=N0*torch.ones(mylen) #Initialise additional samples for this iteration vector for each level
-        sqrt_cost=torch.sqrt((M+1)*M**(torch.arange(min_l-1,L,dtype=torch.float32)))
+        sqrt_cost=torch.sqrt(M**torch.arange(min_l,L+1.)+torch.hstack((torch.tensor([0.]),M**torch.arange(min_l,1.*L))))
         it0_ind=False
         while (torch.sum(dN)>0): #Loop until no additional samples asked for
             mylen=L+1-min_l
@@ -250,7 +250,8 @@ class DDPM(BaseModel):
                     #Add extra entries for the new level and estimate sums with N0 samples 
                     V=torch.cat((V,V[-1]*M**(-beta)*torch.ones(1)), dim=0)
                     sqrt_V=torch.sqrt(V)
-                    sqrt_cost=torch.cat((sqrt_cost,torch.tensor([(M+1)**(.5)*M**((L-1)/2)])),dim=0)
+                    newcost=torch.sqrt(torch.tensor([M**L+M**((L-1.))]))
+                    sqrt_cost=torch.cat((sqrt_cost,newcost),dim=0)
                     Nl_new=torch.ceil(((accsplit*accuracy)**-2)*torch.sum(sqrt_V*sqrt_cost)*(sqrt_V/sqrt_cost)) #Estimate optimal number of sample
                     N=torch.cat((N,torch.tensor([0])),dim=0)
                     dN=torch.clip(Nl_new-N,min=0) #Number of additional samples
@@ -302,12 +303,12 @@ class DDPM(BaseModel):
             this_sample_dir = os.path.join(eval_dir, f"level_{l}")
             if not os.path.exists(this_sample_dir):
                 os.mkdir(this_sample_dir)
-            samples_f=Metrics.tensor2img(Xf)
-            samples_c=Metrics.tensor2img(Xc)            
-            with open(os.path.join(this_sample_dir, "samples_f.npz"), "wb") as fout:
-                np.savez_compressed(fout, samplesf=samples_f)
-            with open(os.path.join(this_sample_dir, "samples_c.npz"), "wb") as fout:
-                np.savez_compressed(fout, samplesc=samples_c)
+                samples_f=Metrics.tensor2img(Xf)
+                samples_c=Metrics.tensor2img(Xc)            
+                with open(os.path.join(this_sample_dir, "samples_f.npz"), "wb") as fout:
+                    np.savez_compressed(fout, samplesf=samples_f)
+                with open(os.path.join(this_sample_dir, "samples_c.npz"), "wb") as fout:
+                    np.savez_compressed(fout, samplesc=samples_c)
                                 
         return sums,sqsums 
     
