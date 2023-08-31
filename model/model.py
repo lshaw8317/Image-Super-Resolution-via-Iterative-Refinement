@@ -327,13 +327,16 @@ class DDPM(BaseModel):
                 sums+=torch.stack([sumdX_l,sumXf,sumXc])
                 sqsums+=torch.stack([sumdX_l2,sumXf2,sumXc2,sumXcXf])
     
-        # Directory to save samples. Repeatedly overwrites, just to save some example samples for debugging
+        # Directory to save samples. Just to save an example sample for debugging
         if l>min_l:
             this_sample_dir = os.path.join(eval_dir, f"level_{l}")
             if not os.path.exists(this_sample_dir):
                 os.mkdir(this_sample_dir)
-                samples_f=Metrics.tensor2img(Xf)
-                samples_c=Metrics.tensor2img(Xc)            
+                samples_f=Metrics.tensor2img(Xf[0])
+                samples_c=Metrics.tensor2img(Xc[0])
+                for i in range(1,min(len(Xf.shape[0]),20)):
+                    samples_f=torch.cat([Metrics.tensor2img(Xf[i]),samples_f],dim=0)
+                    samples_c=torch.cat([Metrics.tensor2img(Xc[i]),samples_c],dim=0)  
                 with open(os.path.join(this_sample_dir, "samples_f.npz"), "wb") as fout:
                     np.savez_compressed(fout, samplesf=samples_f)
                 with open(os.path.join(this_sample_dir, "samples_c.npz"), "wb") as fout:
