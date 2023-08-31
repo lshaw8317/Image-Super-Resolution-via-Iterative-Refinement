@@ -12,7 +12,7 @@ import numpy as np
 from collections import OrderedDict
 
 if __name__ == "__main__":
-    MCSAMPLES=1e6
+    MCSAMPLES=int(1e6)
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str, default='config/sr_sr3_16_128.json',
                         help='JSON file for configuration')
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('-enable_wandb', action='store_true')
     parser.add_argument('-log_wandb_ckpt', action='store_true')
     parser.add_argument('-log_eval', action='store_true')
-    parser.add_argument('-mode', type=str, choices=['MLMC','MC'])
+    parser.add_argument('-mode','--mode', type=str, choices=['MLMC','MC'],default='MLMC')
 
     # parse configs
     args = parser.parse_args()
