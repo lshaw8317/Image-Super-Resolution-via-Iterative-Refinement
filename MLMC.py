@@ -13,6 +13,7 @@ from collections import OrderedDict
 
 if __name__ == "__main__":
     MCSAMPLES=int(1e6)
+    MCL=9
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str, default='config/sr_sr3_16_128.json',
                         help='JSON file for configuration')
@@ -69,11 +70,7 @@ if __name__ == "__main__":
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
     
-    #Modify noise schedule to correspond to MLMC max L in diffusion
-    opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.M**diffusion.Lmax
-    diffusion.set_new_noise_schedule(
-        opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
-
+    
     logger.info('Begin Model Evaluation.')
     avg_psnr = 0.0
     avg_ssim = 0.0
@@ -81,6 +78,11 @@ if __name__ == "__main__":
     result_path = diffusion.eval_dir
     os.makedirs(result_path, exist_ok=True)
     if args.mode=='MLMC':
+        #Modify noise schedule to correspond to MLMC max L in diffusion
+        opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.M**diffusion.Lmax
+        diffusion.set_new_noise_schedule(
+            opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
+
         acc=[args.accuracy]
         for _,  val_data in enumerate(val_loader):
             #val_data automatically has batch size 1 for phase=val
@@ -106,11 +108,16 @@ if __name__ == "__main__":
             if idx>0:
                 break
     else:#args.mode=='MC'
+        #Modify noise schedule to correspond to desired MC L
+        opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.M**MCL
+        diffusion.set_new_noise_schedule(
+            opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
+
         for _,  val_data in enumerate(val_loader):
             #val_data automatically has batch size 1 for phase=val
             idx += 1
             diffusion.feed_data(val_data) #loads in self.data['SR'] which is accessed by self.mlmc
-            diffusion.mc(MCSAMPLES)
+            diffusion.mc(MCSAMPLES,MCL)
             visuals=OrderedDict()
             visuals['INF'] = diffusion.data['SR'].detach().float().cpu()
             visuals['HR'] = diffusion.data['HR'].detach().float().cpu()

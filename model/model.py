@@ -91,14 +91,14 @@ class DDPM(BaseModel):
                     self.data['SR'], continous)
         self.netG.train()
     
-    def mc(self, Nl, continous=False):
+    def mc(self, Nl, MCL,continous=False):
         self.netG.eval()
         eval_dir=self.eval_dir
         this_sample_dir = os.path.join(eval_dir,'MCsamples')
         if not os.path.exists(this_sample_dir):
             os.mkdir(this_sample_dir)
-        l=9
         M=self.M
+        l=MCL
         with open(os.path.join(this_sample_dir, "info_text.txt"),'w') as f:
             f.write(f'MC params:L={l}, Nsamples={Nl}, M={M}.')
         num_sampling_rounds = Nl // self.mlmc_batch_size + 1
