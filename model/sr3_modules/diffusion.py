@@ -232,7 +232,7 @@ class GaussianDiffusion(nn.Module):
     def mcsample(self, x_in, bs, continous=False):
         shape = x_in.shape
         filler=tuple([1 for i in range(len(shape[1:]))])        
-        x = x_in.repeat(bs,*filler).to(betas.device) 
+        x = x_in.repeat(bs,*filler).to(self.betas.device) 
         return self.p_sample_loop(x, continous)
     
     @torch.no_grad()
