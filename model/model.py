@@ -102,6 +102,7 @@ class DDPM(BaseModel):
         with open(os.path.join(this_sample_dir, "info_text.txt"),'w') as f:
             f.write(f'MC params:L={l}, Nsamples={Nl}, M={M}.')
         num_sampling_rounds = Nl // self.mlmc_batch_size + 1
+        print(num_sampling_rounds)
         numrem=Nl % self.mlmc_batch_size
         for r in range(num_sampling_rounds):
             bs=numrem if r==num_sampling_rounds-1 else self.mlmc_batch_size
@@ -113,7 +114,7 @@ class DDPM(BaseModel):
                     self.data['SR'], bs, continous)
             #acts=actspayoff(Xf)
             # Directory to save samples.
-            with open(os.path.join(this_sample_dir, f"samples_{r}.npz"), "wb") as fout:
+            with open(os.path.join(this_sample_dir, f"samples_{self.opt['gpu_ids'][0]}_{r}.npz"), "wb") as fout:
                 np.savez_compressed(fout, samples=Xf.cpu().numpy())
         
         self.netG.train()

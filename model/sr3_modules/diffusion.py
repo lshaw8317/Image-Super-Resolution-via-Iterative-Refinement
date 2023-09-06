@@ -216,7 +216,7 @@ class GaussianDiffusion(nn.Module):
         if continous:
             return ret_img
         else:
-            return ret_img[-1]
+            return img
 
     @torch.no_grad()
     def sample(self, batch_size=1, continous=False):
@@ -232,8 +232,9 @@ class GaussianDiffusion(nn.Module):
     def mcsample(self, x_in, bs, continous=False):
         shape = x_in.shape
         filler=tuple([1 for i in range(len(shape[1:]))])        
-        x = x_in.repeat(bs,*filler).to(self.betas.device) 
-        return self.p_sample_loop(x, continous)
+        x = x_in.repeat(bs,*filler).to(self.betas.device)
+        xf=self.p_sample_loop(x, continous)
+        return xf
     
     @torch.no_grad()
     def mlmcsample(self, condition_x, bs, l):
