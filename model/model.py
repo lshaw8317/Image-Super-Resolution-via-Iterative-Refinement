@@ -19,6 +19,7 @@ class DDPM(BaseModel):
         self.Lmax=11
         self.min_l=3
         self.mlmc_batch_size=64
+        self.accsplit=np.sqrt(.5)
         self.N0=100
         self.eval_dir=opt['path']['experiments_root']
         if opt['payoff']=='mean':
@@ -149,7 +150,7 @@ class DDPM(BaseModel):
             sumdims=tuple(range(1,len(s))) #sqsums is output of payoff element-wise squared, so reduce     
             means_dp=imagenorm(sums[:,0])/Nsamples
             V_dp=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/Nsamples-means_dp**2  
-        
+            
             # Write samples to disk or Google Cloud Storage
             with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
                 torch.save(sums/Nsamples,fout)
@@ -185,7 +186,17 @@ class DDPM(BaseModel):
             sums,sqsums,N=self.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
             sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
             s=sqsums[:,0].shape
+            L=len(N)-1+min_l
+            means_p=imagenorm(sums[:,1])/N #Norm of mean of fine discretisations
+            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
+            s=sqsums[:,0].shape
+            V_p=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/N-means_p**2
 
+            #e^2*cost
+            cost_mlmc=torch.sum(N*(M**np.arange(min_l,L+1)+np.hstack((0,M**np.arange(min_l,L)))))*e**2 #cost is number of NFE
+            cost_mc=V_p[-1]*(self.M**L)/self.accsplit**2
+            
+            
             # Directory to save means, norms and N
             dividerN=N.clone() #add axes to N to broadcast correctly on division
             for i in range(len(sums.shape[1:])):
@@ -200,6 +211,8 @@ class DDPM(BaseModel):
                 torch.save(sqsums/dividerN,fout) #sums has shape (L,4,C,H,W) if img (L,4,2048) if activations
             with open(os.path.join(this_sample_dir, "N.pt"), "wb") as fout:
                 torch.save(N,fout)
+            with open(os.path.join(this_sample_dir, "costs.npz"), "wb") as fout:
+               np.savez_compressed(fout,costmlmc=np.array(cost_mlmc),costmc=np.array(cost_mc))
 
             meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
             meanimg=Metrics.tensor2img(meanimg,min_max=(0, 1))
@@ -211,7 +224,7 @@ class DDPM(BaseModel):
         return None
 
     def mlmc(self,accuracy,x_in,alpha_0=-1,beta_0=-1):
-        accsplit=np.sqrt(.5)
+        accsplit=self.accsplit
         #Orders of convergence
         alpha=max(0,alpha_0)
         beta=max(0,beta_0)
