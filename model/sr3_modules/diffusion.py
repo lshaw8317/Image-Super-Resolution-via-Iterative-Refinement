@@ -251,41 +251,38 @@ class GaussianDiffusion(nn.Module):
         maxsteps=self.M**self.Lmax #want to do a step for 0,1,2...,M**L-1
         stepsize=maxsteps//numsteps
         coarse_time=maxsteps-1
-        counter=0
-        for t in tqdm(reversed(range(-1, maxsteps, stepsize)), desc='sampling loop time step', total=numsteps):
-            counter+=1
-            if t==-1:
-                break
+        fine_time=maxsteps-1
+        for n in range(numsteps):
             noise_level = torch.FloatTensor(
-                [self.sqrt_alphas_cumprod[t]]).repeat(batch_size, 1).to(img_f.device)
+                [self.sqrt_alphas_cumprod[fine_time]]).repeat(batch_size, 1).to(img_f.device)
             ftheta = self.denoise_fn(torch.cat([x, img_f], dim=1), noise_level)
-            if t-stepsize> 0:
+            if fine_time-stepsize> 0:
                 dWf = torch.randn_like(img_f)
-                divider = self.alphas_cumprod[t-stepsize] 
+                divider = self.alphas_cumprod[fine_time-stepsize] 
             else:
                 dWf = torch.zeros_like(img_f)
-                divider= torch.ones_like(self.alphas_cumprod[t])
-            alpha_f = self.alphas_cumprod[t]/divider
+                divider= torch.ones_like(self.alphas_cumprod[fine_time])
+            alpha_f = self.alphas_cumprod[fine_time]/divider
             beta_f=1.-alpha_f
-            model_mean = torch.sqrt(1./alpha_f)*(img_f-beta_f*ftheta/self.sqrt_one_minus_alphas_cumprod[t])
+            model_mean = torch.sqrt(1./alpha_f)*(img_f-beta_f*ftheta/self.sqrt_one_minus_alphas_cumprod[fine_time])
             noise = dWf*torch.sqrt(beta_f)
             img_f = model_mean + noise
             
             alpha_c*=alpha_f
             dWc+=dWf*torch.sqrt(torch.tensor([1./self.M]).to(device))
-            if counter % self.M == 0:
+            fine_time=max(0,fine_time-stepsize) #for on last iteration when fine_time=(M^L/M^l-1)-M^L/M^l=-1
+            if n % self.M == self.M-1:
                 noise_level = torch.FloatTensor(
                     [self.sqrt_alphas_cumprod[coarse_time]]).repeat(batch_size, 1).to(img_f.device)
                 
                 ftheta = self.denoise_fn(torch.cat([x, img_c], dim=1), noise_level)
                 beta_c=(1.-alpha_c)
                 model_mean = torch.sqrt(1./alpha_c)*(img_c-beta_c*ftheta/self.sqrt_one_minus_alphas_cumprod[coarse_time])
-                noise = dWc*torch.sqrt(beta_c)
+                noise = dWc*torch.sqrt(beta_c)*(self.sqrt_one_minus_alphas_cumprod[fine_time]/self.sqrt_one_minus_alphas_cumprod[coarse_time])
                 img_c = model_mean + noise
                 alpha_c=torch.tensor([1.]).to(device)
                 dWc=torch.zeros_like(img_c).to(device)
-                coarse_time=t
-                counter=0
+                coarse_time=fine_time
             
         return inverse_scaler(img_f),inverse_scaler(img_c)
         
