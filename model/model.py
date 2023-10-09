@@ -346,11 +346,11 @@ class DDPM(BaseModel):
             this_sample_dir = os.path.join(eval_dir, f"level_{l}")
             if not os.path.exists(this_sample_dir):
                 os.mkdir(this_sample_dir)
-                samples_f=Metrics.tensor2img(Xf[0])
-                samples_c=Metrics.tensor2img(Xc[0])
+                samples_f=Metrics.tensor2img(Xf[0])[None,...]
+                samples_c=Metrics.tensor2img(Xc[0])[None,...]
                 for i in range(1,min(Xf.shape[0],20)):
-                    samples_f=torch.cat([Metrics.tensor2img(Xf[i]),samples_f],dim=0)
-                    samples_c=torch.cat([Metrics.tensor2img(Xc[i]),samples_c],dim=0)  
+                    samples_f=np.concatenate([samples_f,Metrics.tensor2img(Xf[i])[None,...]],axis=0)
+                    samples_c=np.concatenate([samples_c,Metrics.tensor2img(Xc[i])[None,...]],axis=0)  
                 with open(os.path.join(this_sample_dir, "samples_f.npz"), "wb") as fout:
                     np.savez_compressed(fout, samplesf=samples_f)
                 with open(os.path.join(this_sample_dir, "samples_c.npz"), "wb") as fout:
