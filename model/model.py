@@ -348,7 +348,7 @@ class DDPM(BaseModel):
                 os.mkdir(this_sample_dir)
                 samples_f=Metrics.tensor2img(Xf[0])
                 samples_c=Metrics.tensor2img(Xc[0])
-                for i in range(1,min(len(Xf.shape[0]),20)):
+                for i in range(1,min(Xf.shape[0],20)):
                     samples_f=torch.cat([Metrics.tensor2img(Xf[i]),samples_f],dim=0)
                     samples_c=torch.cat([Metrics.tensor2img(Xc[i]),samples_c],dim=0)  
                 with open(os.path.join(this_sample_dir, "samples_f.npz"), "wb") as fout:
