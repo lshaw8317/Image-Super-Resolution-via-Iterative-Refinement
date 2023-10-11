@@ -140,9 +140,11 @@ class DDPM(BaseModel):
         # Directory to save means and norms                                                                                               
         this_sample_dir = os.path.join(eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
         if not os.path.exists(this_sample_dir):
+            sums=torch.zeros((Lmax+1,*sums.shape))
+            sqsums=torch.zeros((Lmax+1,*sqsums.shape))
             os.mkdir(this_sample_dir)
             print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
-            for i,l in enumerate(range(min_l,Lmax+1)):
+            for i,l in enumerate(range(Lmax+1)):
                 print(f'l={l}')
                 sums[i],sqsums[i] = self.mlmclooper(condition_x,Nsamples,l)
             
@@ -156,8 +158,8 @@ class DDPM(BaseModel):
                 torch.save(sums/Nsamples,fout)
             with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
                 torch.save(sqsums/Nsamples,fout)
-            with open(os.path.join(this_sample_dir, "Ls.pt"), "wb") as fout:
-                torch.save(torch.arange(min_l,Lmax+1,dtype=torch.int32),fout)
+            with open(os.path.join(this_sample_dir, "avgcost.pt"), "wb") as fout:
+                torch.save(torch.cat((torch.tensor([1]),(1+1./M)*M**torch.arange(1,Lmax+1))),fout)
             
             #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
             X=np.ones((Lmax-min_l,2))
