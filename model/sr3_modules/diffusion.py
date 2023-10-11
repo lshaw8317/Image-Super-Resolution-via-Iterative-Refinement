@@ -259,18 +259,20 @@ class GaussianDiffusion(nn.Module):
             if fine_time-stepsize> 0:
                 dWf = torch.randn_like(img_f)
                 divider = self.alphas_cumprod[fine_time-stepsize] 
+                fine_timem1=fine_time-stepsize
             else:
                 dWf = torch.zeros_like(img_f)
                 divider= torch.ones_like(self.alphas_cumprod[fine_time])
+                fine_timem1=0
             alpha_f = self.alphas_cumprod[fine_time]/divider
             beta_f=1.-alpha_f
             model_mean = torch.sqrt(1./alpha_f)*(img_f-beta_f*ftheta/self.sqrt_one_minus_alphas_cumprod[fine_time])
-            noise = dWf*torch.sqrt(beta_f)
+            noise = dWf*torch.sqrt(beta_f)*(self.sqrt_one_minus_alphas_cumprod[fine_timem1]/self.sqrt_one_minus_alphas_cumprod[fine_time])
             img_f = model_mean + noise
             
             alpha_c*=alpha_f
             dWc+=dWf*torch.sqrt(torch.tensor([1./self.M]).to(device))
-            fine_time=max(0,fine_time-stepsize) #for on last iteration when fine_time=(M^L/M^l-1)-M^L/M^l=-1
+            fine_time=max(0,fine_time-stepsize) #for last iteration when fine_time=(M^L/M^l-1)-M^L/M^l=-1
             if n % self.M == self.M-1:
                 noise_level = torch.FloatTensor(
                     [self.sqrt_alphas_cumprod[coarse_time]]).repeat(batch_size, 1).to(img_f.device)
