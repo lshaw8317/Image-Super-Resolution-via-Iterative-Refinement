@@ -5,11 +5,24 @@ import torch
 import torch.nn as nn
 import core.metrics as Metrics
 import os
-from model.sr3_modules.diffusion import imagenorm
 import model.networks as networks
 from .base_model import BaseModel
 logger = logging.getLogger('base')
 
+def mom2norm(sqsums):
+    #sqsums should have shape L,C,H,W
+    s=sqsums.shape
+    if len(s)!=4:
+        raise Exception('shape of sqsums likely not LHCW')
+    return torch.sum(torch.flatten(sqsums, start_dim=1, end_dim=-1),dim=-1)/np.prod(s[1:])
+
+def imagenorm(img):
+    s=img.shape
+    if len(s)==1: #fix for when img is single dimensional (batch_size,) -> (batch_size,1)
+        img=img[:,None]
+    n=torch.linalg.norm(torch.flatten(img, start_dim=1, end_dim=-1),dim=-1) #flattens non-batch dims and calculates norm
+    n/=np.sqrt(np.prod(s[1:]))
+    return n
 
 class DDPM(BaseModel):
     def __init__(self, opt):
@@ -17,17 +30,17 @@ class DDPM(BaseModel):
         
         self.M=2
         self.Lmax=11
-        self.min_l=3
+        self.min_l=4
         self.mlmc_batch_size=64
         self.accsplit=np.sqrt(.5)
         self.N0=100
         self.eval_dir=opt['path']['experiments_root']
         if opt['payoff']=='mean':
             print("mean payoff selected.")
-            self.payoff = lambda samples: samples #default to identity payoff
+            self.payoff = lambda samples: torch.clip(samples,max=1.,min=-1.) #default to identity payoff
         elif opt['payoff']=='second_moment':
             print("second_moment payoff selected.")
-            self.payoff = lambda samples: samples**2 #variance/second moment payoff
+            self.payoff = lambda samples: torch.clip(samples,max=1.,min=-1.)**2 #variance/second moment payoff
         else:
             print("opt['payoff'] not recognised. Defaulting to mean calculation.")
             self.payoff = lambda samples: samples
@@ -133,25 +146,21 @@ class DDPM(BaseModel):
         condition_x=self.data['SR'].to(self.device)
         min_l=self.min_l
         
-        #Variance and mean samples
-        sums,sqsums=self.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
-        sums=torch.zeros((Lmax+1-min_l,*sums.shape))
-        sqsums=torch.zeros((Lmax+1-min_l,*sqsums.shape))
         # Directory to save means and norms                                                                                               
         this_sample_dir = os.path.join(eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
         if not os.path.exists(this_sample_dir):
-            sums=torch.zeros((Lmax+1,*sums.shape))
-            sqsums=torch.zeros((Lmax+1,*sqsums.shape))
+            #Variance and mean samples
+            sums,sqsums=self.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
+            sums=torch.zeros((Lmax+1,*sums.shape[1:]))
+            sqsums=torch.zeros((Lmax+1,*sqsums.shape[1:]))
             os.mkdir(this_sample_dir)
             print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
             for i,l in enumerate(range(Lmax+1)):
                 print(f'l={l}')
                 sums[i],sqsums[i] = self.mlmclooper(condition_x,Nsamples,l)
             
-            s=sqsums[:,0].shape
-            sumdims=tuple(range(1,len(s))) #sqsums is output of payoff element-wise squared, so reduce     
             means_dp=imagenorm(sums[:,0])/Nsamples
-            V_dp=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/Nsamples-means_dp**2  
+            V_dp=mom2norm(sqsums[:,0])/Nsamples-means_dp**2  
             
             # Write samples to disk or Google Cloud Storage
             with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
@@ -186,13 +195,9 @@ class DDPM(BaseModel):
             e=acc[i]
             print(f'Performing mlmc for accuracy={e}')
             sums,sqsums,N=self.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
-            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
-            s=sqsums[:,0].shape
             L=len(N)-1+min_l
             means_p=imagenorm(sums[:,1])/N #Norm of mean of fine discretisations
-            sumdims=tuple(range(1,len(sqsums[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce
-            s=sqsums[:,0].shape
-            V_p=(torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/N-means_p**2
+            V_p=torch.clip(mom2norm(sqsums[:,0])/N-means_p**2,min=0)
 
             #e^2*cost
             cost_mlmc=torch.sum(N*(M**np.arange(min_l,L+1)+np.hstack((0,M**np.arange(min_l,L)))))*e**2 #cost is number of NFE
@@ -257,11 +262,7 @@ class DDPM(BaseModel):
                     
             N+=dN #Increment samples taken counter for each level
             Yl=imagenorm(sums[:,0])/N
-            sumdims=tuple(range(1,len(sqsums[:,0].shape)))
-            s=sqsums[:,0].shape
-            V=torch.clip(
-                (torch.sum(sqsums[:,0],dim=sumdims).squeeze()/np.prod(s[1:]))/N-(Yl)**2
-                ,min=0) #Calculate variance based on updated samples
+            V=torch.clip(mom2norm(sqsums[:,0])/N-(Yl)**2,min=0) #Calculate variance based on updated samples
             
             ##Fix to deal with zero variance or mean by linear extrapolation
             Yl[2:]=torch.maximum(Yl[2:],.5*Yl[1:-1]*M**(-alpha))

@@ -8,13 +8,6 @@ from functools import partial
 import numpy as np
 from tqdm import tqdm
 
-def imagenorm(img):
-    s=img.shape
-    if len(s)==1: #fix for when img is single dimensional (batch_size,) -> (batch_size,1)
-        img=img[:,None]
-    n=torch.linalg.norm(torch.flatten(img, start_dim=1, end_dim=-1),dim=-1) #flattens non-batch dims and calculates norm
-    n/=np.sqrt(np.prod(s[1:]))
-    return n
 
 def inverse_scaler(img):
     # Rescale [-1, 1] to [0, 1]
@@ -286,7 +279,7 @@ class GaussianDiffusion(nn.Module):
                 dWc=torch.zeros_like(img_c).to(device)
                 coarse_time=fine_time
             
-        return inverse_scaler(img_f),inverse_scaler(img_c)
+        return img_f,img_c
         
     def q_sample(self, x_start, continuous_sqrt_alpha_cumprod, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
