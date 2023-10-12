@@ -151,8 +151,8 @@ class DDPM(BaseModel):
         if not os.path.exists(this_sample_dir):
             #Variance and mean samples
             sums,sqsums=self.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
-            sums=torch.zeros((Lmax+1,*sums.shape[1:]))
-            sqsums=torch.zeros((Lmax+1,*sqsums.shape[1:]))
+            sums=torch.zeros((Lmax+1,*sums.shape))
+            sqsums=torch.zeros((Lmax+1,*sqsums.shape))
             os.mkdir(this_sample_dir)
             print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
             for i,l in enumerate(range(Lmax+1)):
