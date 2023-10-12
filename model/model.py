@@ -162,8 +162,8 @@ class DDPM(BaseModel):
                 torch.save(torch.cat((torch.tensor([1]),(1+1./M)*M**torch.arange(1,Lmax+1))),fout)
             
             #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
-            X=np.ones((Lmax-min_l,2))
-            X[:,0]=np.arange(min_l+1,Lmax+1)
+            X=np.ones((Lmax,2))
+            X[:,0]=np.arange(1,Lmax+1)
             a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
             alpha = -a[0]/np.log(M)
             b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
