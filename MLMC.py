@@ -42,7 +42,7 @@ if __name__ == "__main__":
                         'train', level=logging.INFO, screen=True)
     Logger.setup_logger('val', opt['path']['log'], 'val', level=logging.INFO)
     logger = logging.getLogger('base')
-    logger.info(Logger.dict2str(opt))
+    # logger.info(Logger.dict2str(opt))
     tb_logger = SummaryWriter(log_dir=opt['path']['tb_logger'])
 
     # Initialize WandbLogger
