@@ -31,9 +31,9 @@ class DDPM(BaseModel):
         self.M=2
         self.Lmax=11
         self.min_l=4
-        self.mlmc_batch_size=64
+        self.mlmc_batch_size=80
         self.accsplit=np.sqrt(.5)
-        self.N0=100
+        self.N0=50
         self.eval_dir=opt['path']['experiments_root']
         if opt['payoff']=='mean':
             print("mean payoff selected.")
@@ -151,8 +151,8 @@ class DDPM(BaseModel):
         if not os.path.exists(this_sample_dir):
             #Variance and mean samples
             sums,sqsums=self.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
-            sums=torch.zeros((Lmax+1,*sums.shape[1:]))
-            sqsums=torch.zeros((Lmax+1,*sqsums.shape[1:]))
+            sums=torch.zeros((Lmax+1,*sums.shape))
+            sqsums=torch.zeros((Lmax+1,*sqsums.shape))
             os.mkdir(this_sample_dir)
             print(f'Proceeding to calculate variance and means with {Nsamples} estimator samples')
             for i,l in enumerate(range(Lmax+1)):
@@ -197,7 +197,7 @@ class DDPM(BaseModel):
             sums,sqsums,N=self.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
             L=len(N)-1+min_l
             means_p=imagenorm(sums[:,1])/N #Norm of mean of fine discretisations
-            V_p=torch.clip(mom2norm(sqsums[:,0])/N-means_p**2,min=0)
+            V_p=torch.clip(mom2norm(sqsums[:,1])/N-means_p**2,min=0)
 
             #e^2*cost
             cost_mlmc=torch.sum(N*(M**np.arange(min_l,L+1)+np.hstack((0,M**np.arange(min_l,L)))))*e**2 #cost is number of NFE
@@ -222,7 +222,7 @@ class DDPM(BaseModel):
                np.savez_compressed(fout,costmlmc=np.array(cost_mlmc),costmc=np.array(cost_mc))
 
             meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
-            meanimg=Metrics.tensor2img(meanimg,min_max=(0, 1))
+            meanimg=Metrics.tensor2img(meanimg)
             # Write samples to disk or Google Cloud Storage
             with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
                 np.savez_compressed(fout, meanpayoff=meanimg)
