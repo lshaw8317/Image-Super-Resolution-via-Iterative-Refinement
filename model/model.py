@@ -37,13 +37,13 @@ class DDPM(BaseModel):
         self.eval_dir=opt['path']['experiments_root']
         if opt['payoff']=='mean':
             print("mean payoff selected.")
-            self.payoff = lambda samples: torch.clip(samples,max=1.,min=-1.) #default to identity payoff
+            self.payoff = lambda samples: (torch.clip(samples,max=1.,min=-1.)+1.)/2 #default to identity payoff
         elif opt['payoff']=='second_moment':
             print("second_moment payoff selected.")
-            self.payoff = lambda samples: torch.clip(samples,max=1.,min=-1.)**2 #variance/second moment payoff
+            self.payoff = lambda samples: .25*(torch.clip(samples,max=1.,min=-1.)+1.)**2 #variance/second moment payoff
         else:
             print("opt['payoff'] not recognised. Defaulting to mean calculation.")
-            self.payoff = lambda samples: samples
+            self.payoff = lambda samples: (torch.clip(samples,max=1.,min=-1.)+1.)/2 #default to identity payoff
         kwargs={'M':self.M,'Lmax':self.Lmax,'Lmin':self.Lmin,
                 'mlmc_batch_size':self.mlmc_batch_size,'N0':self.N0,
                 'eval_dir':self.eval_dir,'payoff':self.payoff}

@@ -20,8 +20,9 @@ plt.rcParams['savefig.dpi'] = 300
 M=2
 Nsamples=1000
 
+#correct for [-1,1] scaling
 def PSNR(eps):
-    return -20*np.log10(eps)
+    return 20*np.log10(2/eps)
     
 def mom2norm(sqsums):
     #sqsums should have shape L,C,H,W or L,A for activations                                                                              
@@ -40,7 +41,7 @@ def imagenorm(img):
 
 #Set plotting params
 fig,_=plt.subplots(2,2,figsize=(6,6))
-expdir='results/sr_sr3_16_128_mean'
+expdir='results/sr_sr3_16_128_second_moment'
 switcher=expdir.split('_')[-1]
 label='SR3 superresolution ' + (' ').join(expdir.split('_')[-2:])
 markersize=(fig.get_size_inches()[0])
@@ -110,17 +111,17 @@ plottingLmin=Lmax-len(V_p)+1
 
 
 #Plot variances
-axis_list[0].plot(range(Lmin,Lmax+1),np.log(V_p)/np.log(M),'k--',label='$F_{\ell}$',
-                  marker=(8,2,0),markersize=markersize,markerfacecolor="None",markeredgecolor='k', markeredgewidth=1)
-axis_list[0].plot(range(Lmin+1,Lmax+1),np.log(V_dp[1:])/np.log(M),'k-',label='$F_{\ell}-F_{\ell-1}$',
+axis_list[0].semilogy(range(Lmin,Lmax+1),V_p,'k--',label='$F_{\ell}$',
+                  marker=(8,2,0),markersize=markersize,markerfacecolor="None",markeredgecolor='k', markeredgewidth=1,base=2)
+axis_list[0].semilogy(range(Lmin+1,Lmax+1),V_dp[1:],'k-',label='$F_{\ell}-F_{\ell-1}$',
                   marker=(8,2,0), markersize=markersize, markerfacecolor="None", markeredgecolor='k',
-                  markeredgewidth=1)
+                  markeredgewidth=1,base=2)
 #Plot means
-axis_list[1].plot(range(Lmin,Lmax+1),np.log(means_p)/np.log(M),'k--',label='$F_{\ell}$',
-                  marker=(8,2,0), markersize=markersize, markerfacecolor="None",markeredgecolor='k',
+axis_list[1].semilogy(range(Lmin,Lmax+1),means_p,'k--',label='$F_{\ell}$',
+                  marker=(8,2,0), markersize=markersize, markerfacecolor="None",markeredgecolor='k',base=2,
                   markeredgewidth=1)
-axis_list[1].plot(range(Lmin+1,Lmax+1),np.log(means_dp[1:])/np.log(M),'k-',label='$F_{\ell}-F_{\ell-1}$',
-                  marker=(8,2,0),markersize=markersize,markerfacecolor="None",markeredgecolor='k', markeredgewidth=1)
+axis_list[1].semilogy(range(Lmin+1,Lmax+1),means_dp[1:],'k-',label='$F_{\ell}-F_{\ell-1}$',
+                  marker=(8,2,0),markersize=markersize,markerfacecolor="None",markeredgecolor='k', markeredgewidth=1,base=2)
 
     
 #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
@@ -146,17 +147,17 @@ axis_list[0].legend(framealpha=0.6, frameon=True)
 axis_list[0].xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 #Add estimated beta
 s='$\\beta$ = {}'.format(round(beta,2))
-t = axis_list[0].annotate(s, ((Lmax+Lmin)/2+1, np.log(V_dp[4])/np.log(M)+1),
+t = axis_list[0].annotate(s, ((Lmax+Lmin)/2+1, (V_dp[4]*M)),
                           fontsize=markersize,bbox=dict(ec='None',facecolor='None',lw=2))
 
 #Label means plot
 axis_list[1].set_xlabel('$\ell$')
-axis_list[1].set_ylabel(f'log$_{M}$(mean)')
+axis_list[1].set_ylabel(f'mean')
 axis_list[1].legend(framealpha=0.6, frameon=True)
 axis_list[1].xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 #Add estimated alpha
 s='$\\alpha$ = {}'.format(round(alpha,2))
-t = axis_list[1].annotate(s, ((Lmax+Lmin)/2+1, np.log(means_dp[4])/np.log(M)+1), 
+t = axis_list[1].annotate(s, ((Lmax+Lmin)/2+1, means_dp[4]*M), 
                           fontsize=markersize,bbox=dict(ec='None',facecolor='None',lw=2))
 
 
@@ -241,7 +242,7 @@ axis_list[3].set_ylabel('$C_{MLMC}/C_{MC}$')
 axis_list[3].legend(frameon=True,framealpha=0.6)
 
 #Add title and space out subplots
-fig.suptitle(label+f'\n$M={M}$')
+fig.suptitle(label)
 fig.tight_layout(rect=[0, 0.01, 1, 0.99],h_pad=1,w_pad=1,pad=1)
 
 fig.savefig(os.path.join(expdir,'GilesPlot.pdf'), format='pdf', bbox_inches='tight')
