@@ -171,11 +171,11 @@ class DDPM(BaseModel):
                 torch.save(torch.cat((torch.tensor([1]),(1+1./M)*M**torch.arange(1,Lmax+1))),fout)
             
             #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
-            X=np.ones((Lmax,2))
-            X[:,0]=np.arange(1,Lmax+1)
-            a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
+            X=np.ones((Lmax-Lmin+1,2))
+            X[:,0]=np.arange(Lmin,Lmax+1)
+            a = np.linalg.lstsq(X,np.log(means_dp[Lmin:]),rcond=None)[0]
             alpha = -a[0]/np.log(M)
-            b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
+            b = np.linalg.lstsq(X,np.log(V_dp[Lmin:]),rcond=None)[0]
             beta = -b[0]/np.log(M) 
 
             print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
@@ -189,7 +189,8 @@ class DDPM(BaseModel):
             temp=torch.load(f)
             alpha=temp[0].item()
             beta=temp[1].item()
-        
+        alpha=.7
+        beta=1.15
         #Do the calculations and simulations for num levels and complexity plot
         for i in range(len(acc)):
             e=acc[i]
