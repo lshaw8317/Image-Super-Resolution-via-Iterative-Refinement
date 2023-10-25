@@ -87,7 +87,7 @@ class GaussianDiffusion(nn.Module):
             # self.set_new_noise_schedule(schedule_opt)
         self.M=kwargs.get('M')
         self.Lmax=kwargs.get('Lmax')
-        self.min_l=kwargs.get('min_l')
+        self.Lmin=kwargs.get('Lmin')
         self.mlmc_batch_size=kwargs.get('mlmc_batch_size')
         self.N0=kwargs.get('N0')
         self.eval_dir=kwargs.get('eval_dir')

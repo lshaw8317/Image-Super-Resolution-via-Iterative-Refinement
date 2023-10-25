@@ -11,7 +11,7 @@ import torch
 import matplotlib.ticker as ticker
 from matplotlib.legend import Legend
 from PIL import Image          
-
+from core import metrics as Metrics
 plt.rc('text', usetex=True)
 plt.rc('font',**{'serif':['cm']})
 plt.style.use('seaborn-paper')
@@ -19,6 +19,16 @@ plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
 M=2
 Nsamples=1000
+
+def PSNR(eps):
+    return -20*np.log10(eps)
+    
+def mom2norm(sqsums):
+    #sqsums should have shape L,C,H,W or L,A for activations                                                                              
+    s=sqsums.shape
+    if len(s)==2: #fix for when activations is single dimensional (L,2048) -> (L,1,2048)                                                  
+        sqsums=sqsums[:,None]
+    return torch.sum(torch.flatten(sqsums, start_dim=1, end_dim=-1),dim=-1)/np.prod(s[1:])
 
 def imagenorm(img):
     s=img.shape
@@ -29,10 +39,10 @@ def imagenorm(img):
     return n
 
 #Set plotting params
-fig,_=plt.subplots(2,2)
+fig,_=plt.subplots(2,2,figsize=(6,6))
 expdir='results/sr_sr3_16_128_mean'
 switcher=expdir.split('_')[-1]
-label='Testing MLMC Diffusion Models - superresolution ' + (' ').join(expdir.split('_')[-2:])
+label='SR3 superresolution ' + (' ').join(expdir.split('_')[-2:])
 markersize=(fig.get_size_inches()[0])
 axis_list=fig.axes
 
@@ -43,7 +53,6 @@ realvar=np.zeros(len(files))
 realbias=np.zeros(len(files))
 cost_mlmc=np.zeros(len(files))
 cost_mc=np.zeros(len(files))
-Lmin = 3
 Lmax=11
 switcher=expdir.split('_')[-1]
 
@@ -91,14 +100,23 @@ V_p=(torch.sum(sqavgs[:,1],axis=sumdims)/np.prod(s[1:]))-means_p**2
 means_dp=imagenorm(avgs[:,0])
 V_dp=(torch.sum(sqavgs[:,0],axis=sumdims)/np.prod(s[1:]))-means_dp**2  
 Lmin=Lmax-len(V_p)+1
+
+cutoff=Lmin=np.argmax(V_dp<(np.sqrt(M)-1.)**2*V_p[-1]/(1+M))-1 #index of optimal lmin 
+means_p=imagenorm(avgs[cutoff:,1])
+V_p=(torch.sum(sqavgs[cutoff:,1],axis=sumdims)/np.prod(s[1:]))-means_p**2 
+means_dp=imagenorm(avgs[cutoff:,0])
+V_dp=(torch.sum(sqavgs[cutoff:,0],axis=sumdims)/np.prod(s[1:]))-means_dp**2  
+plottingLmin=Lmax-len(V_p)+1
+
+
 #Plot variances
-axis_list[0].plot(range(Lmin,Lmax+1),np.log(V_p)/np.log(M),'k:',label='$F_{\ell}$',
+axis_list[0].plot(range(Lmin,Lmax+1),np.log(V_p)/np.log(M),'k--',label='$F_{\ell}$',
                   marker=(8,2,0),markersize=markersize,markerfacecolor="None",markeredgecolor='k', markeredgewidth=1)
 axis_list[0].plot(range(Lmin+1,Lmax+1),np.log(V_dp[1:])/np.log(M),'k-',label='$F_{\ell}-F_{\ell-1}$',
                   marker=(8,2,0), markersize=markersize, markerfacecolor="None", markeredgecolor='k',
                   markeredgewidth=1)
 #Plot means
-axis_list[1].plot(range(Lmin,Lmax+1),np.log(means_p)/np.log(M),'k:',label='$F_{\ell}$',
+axis_list[1].plot(range(Lmin,Lmax+1),np.log(means_p)/np.log(M),'k--',label='$F_{\ell}$',
                   marker=(8,2,0), markersize=markersize, markerfacecolor="None",markeredgecolor='k',
                   markeredgewidth=1)
 axis_list[1].plot(range(Lmin+1,Lmax+1),np.log(means_dp[1:])/np.log(M),'k-',label='$F_{\ell}-F_{\ell-1}$',
@@ -112,6 +130,14 @@ a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
 alpha = -a[0]/np.log(M)
 b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
 beta = -b[0]/np.log(M)
+
+tempL=torch.arange(1.,Lmax-Lmin+1)
+theory_epsilon=(means_dp[1:]*np.sqrt(2)/(M**alpha-1.))
+sV0=np.sqrt(V_p[0])
+VMC=V_p[-1]
+cumsum2=np.cumsum(np.sqrt(V_dp[1:]*M**(tempL)*(1+1/M)))
+factor=(sV0+cumsum2)**2
+theory_ratio=(M**(-tempL)*factor/(VMC))
 
 #Label variance plot
 axis_list[0].set_xlabel('$\ell$')
@@ -138,6 +164,7 @@ bias=(means_dp[-3]/(M**alpha-1.))**2
 sampling_error=2e-5*V_p[-3]
 Mcerror=np.sqrt(sampling_error+bias).item()
 
+markers=['s','d','x','P','*','p']
 
 for i,f in enumerate(reversed(files)):
     e=float(f.split('_')[-1])
@@ -150,38 +177,35 @@ for i,f in enumerate(reversed(files)):
     with open(os.path.join(f, "N.pt"), "rb") as fout:
         N=torch.load(fout)
     with np.load(os.path.join(f,'meanpayoff.npz')) as data:
-        meanimg=data['meanpayoff']/255.
-    # meanimg=torch.sum(avgs[:,0],axis=0)#cut off one dummy axis
-    # meanimg=(meanimg - meanimg.min()) / (meanimg.max() - meanimg.min())
-    # meanimg=(meanimg.numpy().transpose((1, 2, 0))*255).astype(np.uint8)
+        meanimg=data['meanpayoff'] 
+    meanimg=Metrics.tensor2img(torch.sum(avgs[:,0],axis=0))/255. #cut off one dummy axis
+    
+    
+    # meanimg=torch.sum(avgs[:,0],axis=0)
+    # meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
+    means_p=imagenorm(avgs[:,1]) #Norm of mean of fine discretisations
+
+    means_p=imagenorm(avgs[:,1])
+    V_p=mom2norm(sqavgs[:,1])-means_p**2 
+    means_dp=imagenorm(avgs[:,0])
+    V_dp=mom2norm(sqavgs[:,0])-means_dp**2  
+    L=Lmin+len(N)-1
+
+    cost_mlmc[i]=torch.sum(N*(M**np.arange(Lmin,L+1)+np.hstack((0,M**np.arange(Lmin,L)))))*e**2 #cost is number of NFE
+    cost_mc[i]=2*V_p[-1]*M**L #2*torch.sum(V_p*(M**np.arange(Lmin,L+1)))
+
+    realvar[i]=torch.sum(V_dp/N)
+    realbias[i]=(max(means_dp[-2]/M**(alpha),means_dp[-1])/(M**alpha-1))**2
+    
     plt.figure(fig2)
     ax[i].imshow(meanimg)
     diffa=torch.tensor(meanimg.astype(np.float)-srmean.astype(np.float))
     reala=imagenorm(diffa[None,...])
-    ax[i].set_title(f'${e},{round(reala.item(),4)}$')
+    ax[i].set_title('$\\varepsilon='+str(e)+',\\varepsilon_{est}='+str(round(np.sqrt(realvar[i]+realbias[i]),4))+'$')
     ax[i].set_axis_off()
-    L=Lmin+len(N)-1
     
-    # meanimg=torch.sum(avgs[:,0],axis=0)
-    # meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
-
-    sumdims=tuple(range(1,len(sqavgs[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce                        
-    means_p=imagenorm(avgs[:,1]) #Norm of mean of fine discretisations
-    s=sqavgs[:,1].shape
-    means_p=imagenorm(avgs[:,1])
-    V_p=(torch.sum(sqavgs[:,1],axis=sumdims)/np.prod(s[1:]))-means_p**2 
-    means_dp=imagenorm(avgs[:,0])
-    V_dp=(torch.sum(sqavgs[:,0],axis=sumdims)/np.prod(s[1:]))-means_dp**2  
-    
-    cost_mlmc[i]=torch.sum(N*(M**np.arange(Lmin,L+1)+np.hstack((0,M**np.arange(Lmin,L)))))*e**2 #cost is number of NFE
-    cost_mc[i]=2*V_p[-1]*M**L #2*torch.sum(V_p*(M**np.arange(Lmin,L+1)))
-    
-    realvar[i]=torch.sum(V_dp/N)
-    realbias[i]=(max(means_dp[-2]/M**(alpha),means_dp[-1])/(M**alpha-1))**2
-    
-    
-    axis_list[2].semilogy(range(Lmin,L+1),N,'k-',marker=i,label=f'{e}',markersize=markersize,
-                   markerfacecolor="None",markeredgecolor='k', markeredgewidth=1)
+    axis_list[2].semilogy(range(Lmin,L+1),N,'k-',marker=markers[i],label=f'{round(PSNR(e),1)}',markersize=markersize,
+                   markerfacecolor="k",markeredgecolor='k', markeredgewidth=1)
 plt.figure(fig2)
 ax[-1].set_title(ax[-1].get_title()+f'\n $MSE=\pm {round(Mcerror,4)}$')
 fig2.tight_layout(pad=.1)
@@ -196,28 +220,29 @@ xa=axis_list[2].xaxis
 xa.set_major_locator(ticker.MaxNLocator(integer=True))
 (lines,labels)=axis_list[2].get_legend_handles_labels()
 ncol=1
-leg = Legend(axis_list[2], lines, labels, ncol=ncol, title='Accuracy',
+leg = Legend(axis_list[2], lines, labels, ncol=ncol, title='PSNR',
              frameon=True, framealpha=0.6)
 leg._legend_box.align = "right"
 axis_list[2].add_artist(leg)
 
 #Label and plot complexity plot
 indices=np.argsort(acc)
-sortcost_mc=cost_mc[indices]
-sortcost_mlmc=cost_mlmc[indices]
-sortacc=acc[indices]
+sortcost_mc=cost_mc
+sortcost_mlmc=cost_mlmc
+# sortacc=acc[indices]
+sortacc=np.sqrt(realvar+realbias)
 
-axis_list[3].loglog(sortacc,sortcost_mc,'k:',marker=(8,2,0),markersize=markersize,
-             markerfacecolor="None",markeredgecolor='k', markeredgewidth=1,label='Std. MC',base=2)
-axis_list[3].loglog(sortacc,sortcost_mlmc,'k-',marker=(8,2,0),markersize=markersize,
-             markerfacecolor="None",markeredgecolor='k', markeredgewidth=1,label='Std. MLMC',base=2)
-axis_list[3].set_xlabel('Acc. $\\varepsilon$')
-axis_list[3].set_ylabel('$\\varepsilon^{2}$cost')
+axis_list[3].semilogy(PSNR(sortacc),sortcost_mlmc/sortcost_mc,'k-',marker=(8,2,0),markersize=markersize,
+             markerfacecolor="None",markeredgecolor='k', markeredgewidth=1,label='Experiment',base=2)
+axis_list[3].semilogy(PSNR(theory_epsilon),theory_ratio,'k--',marker=None,markersize=markersize,
+               markerfacecolor="None",markeredgecolor='k', markeredgewidth=1,label='Theory',base=2)
+axis_list[3].set_xlabel('PSNR')
+axis_list[3].set_ylabel('$C_{MLMC}/C_{MC}$')
 axis_list[3].legend(frameon=True,framealpha=0.6)
 
 #Add title and space out subplots
 fig.suptitle(label+f'\n$M={M}$')
-fig.tight_layout(rect=[0, 0.03, 1, 0.94],h_pad=1,w_pad=1,pad=1)
+fig.tight_layout(rect=[0, 0.01, 1, 0.99],h_pad=1,w_pad=1,pad=1)
 
 fig.savefig(os.path.join(expdir,'GilesPlot.pdf'), format='pdf', bbox_inches='tight')
 
