@@ -75,7 +75,7 @@ class DDPM(BaseModel):
                 optim_params, lr=opt['train']["optimizer"]["lr"])
             self.log_dict = OrderedDict()
         self.load_network()
-        self.print_network()
+        # self.print_network()
         self.image_size=self.opt['model']['diffusion']['image_size']
         self.channels=self.opt['model']['diffusion']['channels']
 
