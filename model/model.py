@@ -30,10 +30,10 @@ class DDPM(BaseModel):
         
         self.M=2
         self.Lmax=11
-        self.min_l=4
-        self.mlmc_batch_size=64
+        self.Lmin=4
+        self.mlmc_batch_size=80
         self.accsplit=np.sqrt(.5)
-        self.N0=100
+        self.N0=50
         self.eval_dir=opt['path']['experiments_root']
         if opt['payoff']=='mean':
             print("mean payoff selected.")
@@ -44,7 +44,7 @@ class DDPM(BaseModel):
         else:
             print("opt['payoff'] not recognised. Defaulting to mean calculation.")
             self.payoff = lambda samples: samples
-        kwargs={'M':self.M,'Lmax':self.Lmax,'min_l':self.min_l,
+        kwargs={'M':self.M,'Lmax':self.Lmax,'Lmin':self.Lmin,
                 'mlmc_batch_size':self.mlmc_batch_size,'N0':self.N0,
                 'eval_dir':self.eval_dir,'payoff':self.payoff}
         # define network and load pretrained models
@@ -144,13 +144,13 @@ class DDPM(BaseModel):
         eval_dir = self.eval_dir
         Nsamples=1000
         condition_x=self.data['SR'].to(self.device)
-        min_l=self.min_l
+        Lmin=self.Lmin
         
         # Directory to save means and norms                                                                                               
         this_sample_dir = os.path.join(eval_dir, f"VarMean_M_{M}_Nsamples_{Nsamples}")
         if not os.path.exists(this_sample_dir):
             #Variance and mean samples
-            sums,sqsums=self.mlmclooper(condition_x,l=1,Nl=1,min_l=0) #dummy run to get sum shapes 
+            sums,sqsums=self.mlmclooper(condition_x,l=1,Nl=1,Lmin=0) #dummy run to get sum shapes 
             sums=torch.zeros((Lmax+1,*sums.shape))
             sqsums=torch.zeros((Lmax+1,*sqsums.shape))
             os.mkdir(this_sample_dir)
@@ -180,7 +180,7 @@ class DDPM(BaseModel):
 
             print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
             with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
-                f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={min_l}, Nsamples={Nsamples}, M={M}.\n')
+                f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={Lmin}, Nsamples={Nsamples}, M={M}.\n')
                 f.write(f'Estimated alpha={alpha}\n Estimated beta={beta}')
             with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
                 torch.save(torch.tensor([alpha,beta]),fout)
@@ -195,12 +195,12 @@ class DDPM(BaseModel):
             e=acc[i]
             print(f'Performing mlmc for accuracy={e}')
             sums,sqsums,N=self.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
-            L=len(N)-1+min_l
+            L=len(N)-1+Lmin
             means_p=imagenorm(sums[:,1])/N #Norm of mean of fine discretisations
-            V_p=torch.clip(mom2norm(sqsums[:,0])/N-means_p**2,min=0)
+            V_p=torch.clip(mom2norm(sqsums[:,1])/N-means_p**2,min=0)
 
             #e^2*cost
-            cost_mlmc=torch.sum(N*(M**np.arange(min_l,L+1)+np.hstack((0,M**np.arange(min_l,L)))))*e**2 #cost is number of NFE
+            cost_mlmc=torch.sum(N*(M**np.arange(Lmin,L+1)+np.hstack((0,M**np.arange(Lmin,L)))))*e**2 #cost is number of NFE
             cost_mc=V_p[-1]*(self.M**L)/self.accsplit**2
             
             
@@ -222,7 +222,7 @@ class DDPM(BaseModel):
                np.savez_compressed(fout,costmlmc=np.array(cost_mlmc),costmc=np.array(cost_mc))
 
             meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
-            meanimg=Metrics.tensor2img(meanimg,min_max=(0, 1))
+            meanimg=Metrics.tensor2img(meanimg) #default min_max=(-1., 1.)
             # Write samples to disk or Google Cloud Storage
             with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
                 np.savez_compressed(fout, meanpayoff=meanimg)
@@ -238,21 +238,21 @@ class DDPM(BaseModel):
         M=self.M
         N0=self.N0
         Lmax=self.Lmax
-        min_l=self.min_l
-        L=min_l+2
+        Lmin=self.Lmin
+        L=Lmin+1
 
-        mylen=L+1-min_l
+        mylen=L+1-Lmin
         V=torch.zeros(mylen) #Initialise variance vector of each levels' variance
         N=torch.zeros(mylen) #Initialise num. samples vector of each levels' num. samples
         dN=N0*torch.ones(mylen) #Initialise additional samples for this iteration vector for each level
-        sqrt_cost=torch.sqrt(M**torch.arange(min_l,L+1.)+torch.hstack((torch.tensor([0.]),M**torch.arange(min_l,1.*L))))
+        sqrt_cost=torch.sqrt(M**torch.arange(Lmin,L+1.)+torch.hstack((torch.tensor([0.]),M**torch.arange(Lmin,1.*L))))
         it0_ind=False
         while (torch.sum(dN)>0): #Loop until no additional samples asked for
-            mylen=L+1-min_l
-            for i,l in enumerate(torch.arange(min_l,L+1)):
+            mylen=L+1-Lmin
+            for i,l in enumerate(torch.arange(Lmin,L+1)):
                 num=dN[i]
                 if num>0: #If asked for additional samples...
-                    tempsums,tempsqsums=self.mlmclooper(condition_x=x_in,Nl=int(num),l=l,min_l=min_l) #Call function which gives sums
+                    tempsums,tempsqsums=self.mlmclooper(condition_x=x_in,Nl=int(num),l=l,Lmin=Lmin) #Call function which gives sums
                     if not it0_ind:
                         sums=torch.zeros((mylen,*tempsums.shape)) #Initialise sums array of unnormed [dX,Xf,Xc], each column is a level
                         sqsums=torch.zeros((mylen,*tempsqsums.shape)) #Initialise sqsums array of normed [dX^2,Xf^2,Xc^2,XcXf], each column is a level
@@ -285,7 +285,7 @@ class DDPM(BaseModel):
             sqrt_V=torch.sqrt(V)
             Nl_new=torch.ceil(((accsplit*accuracy)**-2)*torch.sum(sqrt_V*sqrt_cost)*(sqrt_V/sqrt_cost)) #Estimate optimal number of samples/level
             dN=torch.clip(Nl_new-N,min=0) #Number of additional samples
-            print(f'Asking for {dN} new samples for l=[{min_l,L}]')
+            print(f'Asking for {dN} new samples for l=[{Lmin,L}]')
             if torch.sum(dN > 0.01*N).item() == 0: #Almost converged
                 if max(Yl[-2]/(M**alpha),Yl[-1])>(M**alpha-1)*accuracy*np.sqrt(1-accsplit**2):
                     L+=1
@@ -301,7 +301,7 @@ class DDPM(BaseModel):
                     Nl_new=torch.ceil(((accsplit*accuracy)**-2)*torch.sum(sqrt_V*sqrt_cost)*(sqrt_V/sqrt_cost)) #Estimate optimal number of sample
                     N=torch.cat((N,torch.tensor([0])),dim=0)
                     dN=torch.clip(Nl_new-N,min=0) #Number of additional samples
-                    print(f'With new L, estimate of {dN} new samples for l=[{min_l,L}]')
+                    print(f'With new L, estimate of {dN} new samples for l=[{Lmin,L}]')
                     sums=torch.cat((sums,torch.zeros((1,*sums[0].shape))),dim=0)
                     sqsums=torch.cat((sqsums,torch.zeros((1,*sqsums[0].shape))),dim=0)
                     
@@ -309,7 +309,7 @@ class DDPM(BaseModel):
         print(f'Estimated beta = {beta_}')
         return sums,sqsums,N
     
-    def mlmclooper(self,condition_x,Nl,l,min_l=0):
+    def mlmclooper(self,condition_x,Nl,l,Lmin=0):
         eval_dir=self.eval_dir
         num_sampling_rounds = Nl // self.mlmc_batch_size + 1
         numrem=Nl % self.mlmc_batch_size
@@ -329,11 +329,11 @@ class DDPM(BaseModel):
                 sqsums=torch.zeros((4,*fine_payoff.shape[1:]))
             sumXf=torch.sum(fine_payoff,axis=0).to('cpu') #sum over batch size
             sumXf2=torch.sum(fine_payoff**2,axis=0).to('cpu')
-            if l==min_l:
+            if l==Lmin:
                 sqsums+=torch.stack([sumXf2,sumXf2,torch.zeros_like(sumXf2),torch.zeros_like(sumXf2)])
                 sums+=torch.stack([sumXf,sumXf,torch.zeros_like(sumXf)])
-            elif l<min_l:
-                raise ValueError("l must be at least min_l")
+            elif l<Lmin:
+                raise ValueError("l must be at least Lmin")
             else:
                 dX_l=fine_payoff-coarse_payoff #Image difference
                 sumdX_l=torch.sum(dX_l,axis=0).to('cpu') #sum over batch size
@@ -345,7 +345,7 @@ class DDPM(BaseModel):
                 sqsums+=torch.stack([sumdX_l2,sumXf2,sumXc2,sumXcXf])
     
         # Directory to save samples. Just to save an example sample for debugging
-        if l>min_l:
+        if l>Lmin:
             this_sample_dir = os.path.join(eval_dir, f"level_{l}")
             if not os.path.exists(this_sample_dir):
                 os.mkdir(this_sample_dir)
