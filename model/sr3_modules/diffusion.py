@@ -9,10 +9,6 @@ import numpy as np
 from tqdm import tqdm
 
 
-def inverse_scaler(img):
-    # Rescale [-1, 1] to [0, 1]
-    return (img + 1.) / 2.
-
 def _warmup_beta(linear_start, linear_end, n_timestep, warmup_frac):
     betas = linear_end * np.ones(n_timestep, dtype=np.float64)
     warmup_time = int(n_timestep * warmup_frac)

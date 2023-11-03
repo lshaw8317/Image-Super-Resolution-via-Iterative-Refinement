@@ -65,11 +65,16 @@ if __name__ == "__main__":
     logger.info('Initial Dataset Finished')
 
     # model
+    temp_path=os.path.join(opt['datasets'][phase]['dataroot'],'mask_128')
+    for maskfile in os.listdir(temp_path):
+        #Fudge, should only be one mask
+        with open(os.path.join(temp_path,maskfile),'rb') as f:
+            opt['datasets']['MASK']=torch.load(f)
     diffusion = Model.create_model(opt)
+    diffusion.eval_dir=diffusion.eval_dir+'test'
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
-    
     
     logger.info('Begin Model Evaluation.')
     avg_psnr = 0.0

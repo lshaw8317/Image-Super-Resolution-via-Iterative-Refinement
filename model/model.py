@@ -9,19 +9,19 @@ import model.networks as networks
 from .base_model import BaseModel
 logger = logging.getLogger('base')
 
-def mom2norm(sqsums):
+def mom2norm(sqsums,MASK):
     #sqsums should have shape L,C,H,W
-    s=sqsums.shape
+    s=MASK.sum()
     if len(s)!=4:
         raise Exception('shape of sqsums likely not LHCW')
-    return torch.sum(torch.flatten(sqsums, start_dim=1, end_dim=-1),dim=-1)/np.prod(s[1:])
+    return torch.sum(torch.flatten(sqsums*MASK[None,...], start_dim=1, end_dim=-1),dim=-1)/s
 
-def imagenorm(img):
-    s=img.shape
+def imagenorm(img,MASK):
+    s=MASK.sum()
     if len(s)==1: #fix for when img is single dimensional (batch_size,) -> (batch_size,1)
         img=img[:,None]
-    n=torch.linalg.norm(torch.flatten(img, start_dim=1, end_dim=-1),dim=-1) #flattens non-batch dims and calculates norm
-    n/=np.sqrt(np.prod(s[1:]))
+    n=torch.linalg.norm(torch.flatten(img*MASK[None,...], start_dim=1, end_dim=-1),dim=-1) #flattens non-batch dims and calculates norm
+    n/=np.sqrt(s)
     return n
 
 class DDPM(BaseModel):
@@ -78,6 +78,11 @@ class DDPM(BaseModel):
         # self.print_network()
         self.image_size=self.opt['model']['diffusion']['image_size']
         self.channels=self.opt['model']['diffusion']['channels']
+        try:
+            self.MASK=opt['model']['MASK']
+        except:
+            print('No MASK selected for MLMC. Defaulting to identity')
+            self.MASK=torch.ones((self.channels,self.image_size,self.image_size))
 
     def feed_data(self, data):
         self.data = self.set_device(data)
@@ -134,7 +139,7 @@ class DDPM(BaseModel):
         self.netG.train()
         return None
 
-        
+    
     def Giles_plot(self,acc):
         self.netG.eval()
         #Set mlmc params
@@ -159,8 +164,8 @@ class DDPM(BaseModel):
                 print(f'l={l}')
                 sums[i],sqsums[i] = self.mlmclooper(condition_x,Nsamples,l)
             
-            means_dp=imagenorm(sums[:,0])/Nsamples
-            V_dp=mom2norm(sqsums[:,0])/Nsamples-means_dp**2  
+            means_dp=imagenorm(sums[:,0],self.MASK)/Nsamples
+            V_dp=mom2norm(sqsums[:,0],self.MASK)/Nsamples-means_dp**2  
             
             # Write samples to disk or Google Cloud Storage
             with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
@@ -197,12 +202,12 @@ class DDPM(BaseModel):
             print(f'Performing mlmc for accuracy={e}')
             sums,sqsums,N=self.mlmc(e,condition_x,alpha_0=alpha,beta_0=beta) #sums=[dX,Xf,Xc], sqsums=[||dX||^2,||Xf||^2,||Xc||^2]
             L=len(N)-1+Lmin
-            means_p=imagenorm(sums[:,1])/N #Norm of mean of fine discretisations
-            V_p=torch.clip(mom2norm(sqsums[:,1])/N-means_p**2,min=0)
+            means_p=imagenorm(sums[:,1],self.MASK)/N #Norm of mean of fine discretisations
+            V_p=torch.clip(mom2norm(sqsums[:,1],self.MASK)/N-means_p**2,min=0)
 
             #cost
             cost_mlmc=torch.sum(N*(M**np.arange(Lmin,L+1)+np.hstack((0,M**np.arange(Lmin,L))))) #cost is number of NFE
-            cost_mc=(e**-2)*V_p[-1]*(self.M**L)/self.accsplit**2
+            cost_mc=V_p[-1]*(self.M**L)/(e*self.accsplit)**2
             
             
             # Directory to save means, norms and N
@@ -262,8 +267,8 @@ class DDPM(BaseModel):
                     sums[i,...]+=tempsums
                     
             N+=dN #Increment samples taken counter for each level
-            Yl=imagenorm(sums[:,0])/N
-            V=torch.clip(mom2norm(sqsums[:,0])/N-(Yl)**2,min=0) #Calculate variance based on updated samples
+            Yl=imagenorm(sums[:,0],self.MASK)/N
+            V=torch.clip(mom2norm(sqsums[:,0],self.MASK)/N-(Yl)**2,min=0) #Calculate variance based on updated samples
             
             ##Fix to deal with zero variance or mean by linear extrapolation
             Yl[2:]=torch.maximum(Yl[2:],.5*Yl[1:-1]*M**(-alpha))
