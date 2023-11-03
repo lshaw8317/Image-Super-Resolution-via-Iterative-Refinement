@@ -41,7 +41,7 @@ def imagenorm(img):
 
 #Set plotting params
 fig,_=plt.subplots(2,2,figsize=(6,6))
-expdir='results/sr_sr3_16_128_second_moment'
+expdir='results/sr_sr3_16_128_mean'
 switcher=expdir.split('_')[-1]
 label='SR3 superresolution ' + (' ').join(expdir.split('_')[-2:])
 markersize=(fig.get_size_inches()[0])
@@ -94,19 +94,18 @@ with open(os.path.join(this_sample_dir, "averages.pt"), "rb") as fout:
 with open(os.path.join(this_sample_dir, "sqaverages.pt"), "rb") as fout:
     sqavgs=torch.load(fout)
 
-sumdims=tuple(range(1,len(sqavgs[:,0].shape))) #sqsums is output of payoff element-wise squared, so reduce                        
-s=sqavgs[:,0].shape
+
 means_p=imagenorm(avgs[:,1])
-V_p=(torch.sum(sqavgs[:,1],axis=sumdims)/np.prod(s[1:]))-means_p**2 
+V_p=mom2norm(sqavgs[:,1])-means_p**2 
 means_dp=imagenorm(avgs[:,0])
-V_dp=(torch.sum(sqavgs[:,0],axis=sumdims)/np.prod(s[1:]))-means_dp**2  
+V_dp=mom2norm(sqavgs[:,0])-means_dp**2  
 Lmin=Lmax-len(V_p)+1
 
 cutoff=Lmin=np.argmax(V_dp<(np.sqrt(M)-1.)**2*V_p[-1]/(1+M))-1 #index of optimal lmin 
 means_p=imagenorm(avgs[cutoff:,1])
-V_p=(torch.sum(sqavgs[cutoff:,1],axis=sumdims)/np.prod(s[1:]))-means_p**2 
+V_p=mom2norm(sqavgs[cutoff:,1])-means_p**2 
 means_dp=imagenorm(avgs[cutoff:,0])
-V_dp=(torch.sum(sqavgs[cutoff:,0],axis=sumdims)/np.prod(s[1:]))-means_dp**2  
+V_dp=mom2norm(sqavgs[cutoff:,0])-means_dp**2  
 plottingLmin=Lmax-len(V_p)+1
 
 
@@ -179,8 +178,7 @@ for i,f in enumerate(reversed(files)):
         N=torch.load(fout)
     with np.load(os.path.join(f,'meanpayoff.npz')) as data:
         meanimg=data['meanpayoff'] 
-    meanimg=Metrics.tensor2img(torch.sum(avgs[:,0],axis=0))/255. #cut off one dummy axis
-    
+    meanimg=Metrics.tensor2img(torch.sum(avgs[:,0],axis=0),min_max=(0.,1.))/255. #cut off one dummy axis
     
     # meanimg=torch.sum(avgs[:,0],axis=0)
     # meanimg=np.clip(meanimg.permute(1, 2, 0).cpu().numpy() * 255., 0, 255).astype(np.uint8)
