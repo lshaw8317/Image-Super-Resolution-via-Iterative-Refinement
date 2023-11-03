@@ -189,7 +189,7 @@ class DDPM(BaseModel):
             temp=torch.load(f)
             alpha=temp[0].item()
             beta=temp[1].item()
-        alpha=.7
+        alpha=0.7
         beta=1.15
         #Do the calculations and simulations for num levels and complexity plot
         for i in range(len(acc)):

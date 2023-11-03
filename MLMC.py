@@ -75,7 +75,8 @@ if __name__ == "__main__":
     avg_psnr = 0.0
     avg_ssim = 0.0
     idx = 0
-    result_path = diffusion.eval_dir + 'test'
+    diffusion.eval_dir=diffusion.eval_dir
+    result_path = diffusion.eval_dir
     os.makedirs(result_path, exist_ok=True)
     if args.mode=='MLMC':
         #Modify noise schedule to correspond to MLMC max L in diffusion
