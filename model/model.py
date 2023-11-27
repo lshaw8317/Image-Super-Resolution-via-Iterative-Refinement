@@ -12,14 +12,12 @@ logger = logging.getLogger('base')
 def mom2norm(sqsums,MASK):
     #sqsums should have shape L,C,H,W
     s=MASK.sum()
-    if len(s)!=4:
+    if len(sqsums.shape)!=4:
         raise Exception('shape of sqsums likely not LHCW')
     return torch.sum(torch.flatten(sqsums*MASK[None,...], start_dim=1, end_dim=-1),dim=-1)/s
 
 def imagenorm(img,MASK):
     s=MASK.sum()
-    if len(s)==1: #fix for when img is single dimensional (batch_size,) -> (batch_size,1)
-        img=img[:,None]
     n=torch.linalg.norm(torch.flatten(img*MASK[None,...], start_dim=1, end_dim=-1),dim=-1) #flattens non-batch dims and calculates norm
     n/=np.sqrt(s)
     return n
@@ -30,10 +28,10 @@ class DDPM(BaseModel):
         
         self.M=2
         self.Lmax=11
-        self.Lmin=4
+        self.Lmin=3
         self.mlmc_batch_size=80
         self.accsplit=np.sqrt(.5)
-        self.N0=50
+        self.N0=100
         self.eval_dir=opt['path']['experiments_root']
         if opt['payoff']=='mean':
             print("mean payoff selected.")
@@ -79,7 +77,7 @@ class DDPM(BaseModel):
         self.image_size=self.opt['model']['diffusion']['image_size']
         self.channels=self.opt['model']['diffusion']['channels']
         try:
-            self.MASK=opt['model']['MASK']
+            self.MASK=(opt['datasets']['MASK']).type(torch.float32)
         except:
             print('No MASK selected for MLMC. Defaulting to identity')
             self.MASK=torch.ones((self.channels,self.image_size,self.image_size))
@@ -125,12 +123,11 @@ class DDPM(BaseModel):
         numrem=Nl % self.mlmc_batch_size
         for r in range(num_sampling_rounds):
             bs=numrem if r==num_sampling_rounds-1 else self.mlmc_batch_size
-            if isinstance(self.netG, nn.DataParallel):
-                Xf= self.netG.module.mcsample(
-                    self.data['SR'], bs, continous)
-            else:
-                Xf = self.netG.mcsample(
-                    self.data['SR'], bs, continous)
+            with torch.no_grad():
+                if isinstance(self.netG, nn.DataParallel):
+                    Xf= self.netG.module.mcsample(self.data['SR'], bs, continous)
+                else:
+                    Xf = self.netG.mcsample(self.data['SR'], bs, continous)
             #acts=actspayoff(Xf)
             # Directory to save samples.
             with open(os.path.join(this_sample_dir, f"samples_{self.opt['gpu_ids'][0]}_{r}.npz"), "wb") as fout:
@@ -163,26 +160,36 @@ class DDPM(BaseModel):
             for i,l in enumerate(range(Lmax+1)):
                 print(f'l={l}')
                 sums[i],sqsums[i] = self.mlmclooper(condition_x,Nsamples,l)
+
+                
+                # Write samples to disk or Google Cloud Storage
+                with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
+                    torch.save(sums/Nsamples,fout)
+                with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
+                    torch.save(sqsums/Nsamples,fout)
+                with open(os.path.join(this_sample_dir, "avgcost.pt"), "wb") as fout:
+                    torch.save(torch.cat((torch.tensor([1]),(1+1./M)*M**torch.arange(1,Lmax+1))),fout)
             
             means_dp=imagenorm(sums[:,0],self.MASK)/Nsamples
             V_dp=mom2norm(sqsums[:,0],self.MASK)/Nsamples-means_dp**2  
-            
-            # Write samples to disk or Google Cloud Storage
-            with open(os.path.join(this_sample_dir, "averages.pt"), "wb") as fout:
-                torch.save(sums/Nsamples,fout)
-            with open(os.path.join(this_sample_dir, "sqaverages.pt"), "wb") as fout:
-                torch.save(sqsums/Nsamples,fout)
-            with open(os.path.join(this_sample_dir, "avgcost.pt"), "wb") as fout:
-                torch.save(torch.cat((torch.tensor([1]),(1+1./M)*M**torch.arange(1,Lmax+1))),fout)
+            means_p=imagenorm(sums[:,1],self.MASK)/Nsamples
+            V_p=mom2norm(sqsums[:,1],self.MASK)/Nsamples-means_p**2
             
             #Estimate orders of weak (alpha from means) and strong (beta from variance) convergence using LR
-            X=np.ones((Lmax-Lmin+1,2))
-            X[:,0]=np.arange(Lmin,Lmax+1)
-            a = np.linalg.lstsq(X,np.log(means_dp[Lmin:]),rcond=None)[0]
+            cutoff=np.argmax(V_dp<(np.sqrt(M)-1.)**2*V_p[-1]/(1+M))-1 #index of optimal lmin 
+            means_p=means_p[cutoff:]
+            V_p=V_p[cutoff:]
+            means_dp=means_dp[cutoff:]
+            V_dp=V_dp[cutoff:]
+            
+            X=np.ones((Lmax-cutoff+1,2))
+            X[:,0]=np.arange(1.,Lmax-cutoff+1)
+            a = np.linalg.lstsq(X,np.log(means_dp[1:]),rcond=None)[0]
             alpha = -a[0]/np.log(M)
-            b = np.linalg.lstsq(X,np.log(V_dp[Lmin:]),rcond=None)[0]
-            beta = -b[0]/np.log(M) 
-
+            Y0=np.exp(a[1])
+            b = np.linalg.lstsq(X,np.log(V_dp[1:]),rcond=None)[0]
+            beta = -b[0]/np.log(M)
+        
             print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
             with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
                 f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={Lmin}, Nsamples={Nsamples}, M={M}.\n')
@@ -190,12 +197,12 @@ class DDPM(BaseModel):
             with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
                 torch.save(torch.tensor([alpha,beta]),fout)
                 
-        with open(os.path.join(this_sample_dir, "alphabeta.pt"),'rb') as f:
-            temp=torch.load(f)
-            alpha=temp[0].item()
-            beta=temp[1].item()
-        alpha=0.7
-        beta=1.15
+        #with open(os.path.join(this_sample_dir, "alphabeta.pt"),'rb') as f:
+        #    temp=torch.load(f)
+        #    alpha=temp[0].item()
+        #    beta=temp[1].item()
+        alpha=.8
+        beta=1.4
         #Do the calculations and simulations for num levels and complexity plot
         for i in range(len(acc)):
             e=acc[i]
@@ -228,7 +235,7 @@ class DDPM(BaseModel):
                np.savez_compressed(fout,costmlmc=np.array(cost_mlmc),costmc=np.array(cost_mc))
 
             meanimg=torch.sum(sums[:,0]/dividerN[:,0,...],axis=0)#cut off one dummy axis
-            meanimg=Metrics.tensor2img(meanimg) #default min_max=(-1., 1.)
+            meanimg=Metrics.tensor2img(meanimg,min_max=(0,1)) #default min_max=(-1., 1.)
             # Write samples to disk or Google Cloud Storage
             with open(os.path.join(this_sample_dir, "meanpayoff.npz"), "wb") as fout:
                 np.savez_compressed(fout, meanpayoff=meanimg)
@@ -268,7 +275,7 @@ class DDPM(BaseModel):
                     
             N+=dN #Increment samples taken counter for each level
             Yl=imagenorm(sums[:,0],self.MASK)/N
-            V=torch.clip(mom2norm(sqsums[:,0],self.MASK)/N-(Yl)**2,min=0) #Calculate variance based on updated samples
+            V=torch.clip(mom2norm(sqsums[:,0],self.MASK)/N-(Yl)**2,min=0.) #Calculate variance based on updated samples
             
             ##Fix to deal with zero variance or mean by linear extrapolation
             Yl[2:]=torch.maximum(Yl[2:],.5*Yl[1:-1]*M**(-alpha))
@@ -278,7 +285,7 @@ class DDPM(BaseModel):
             #Yl=(M^alpha-1)khl^alpha=(M^alpha-1)k(TM^-l)^alpha=((M^alpha-1)kT^alpha)M^(-l*alpha)
             #=>log(Yl)=log(k(M^alpha-1)T^alpha)-alpha*l*log(M)
             X=torch.ones((mylen-1,2))
-            X[:,0]=torch.arange(1,mylen)
+            X[:,0]=torch.arange(1.,mylen)
             a = torch.linalg.lstsq(X,torch.log(Yl[1:]))[0]
             alpha_ = max(-a[0]/np.log(M),0.)
             b = torch.linalg.lstsq(X,torch.log(V[1:]))[0]

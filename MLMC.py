@@ -69,9 +69,10 @@ if __name__ == "__main__":
     for maskfile in os.listdir(temp_path):
         #Fudge, should only be one mask
         with open(os.path.join(temp_path,maskfile),'rb') as f:
-            opt['datasets']['MASK']=torch.load(f)
+            mask=torch.load(f)
+            opt['datasets']['MASK']=1.*mask #convert to float
     diffusion = Model.create_model(opt)
-    diffusion.eval_dir=diffusion.eval_dir+'test'
+    diffusion.eval_dir=diffusion.eval_dir+'mask'
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
