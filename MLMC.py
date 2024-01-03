@@ -20,9 +20,9 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--phase', type=str, choices=['val'],
                         help='Run val(generation)', default='val')
     parser.add_argument('-gpu', '--gpu_ids', type=str, default=None)
-    parser.add_argument('-acc', '--accuracy', type=float, default=None)
+    parser.add_argument('-acc', '--accuracy', type=float, nargs='+',default=None)
     parser.add_argument('-debug', '-d', action='store_true')
-    parser.add_argument('-payoff', '--payoff', type=str, choices =['mean','second_moment'], default='mean')
+    parser.add_argument('-payoff', '--payoff', type=str, choices =['mean','second_moment','proj_mean'], default='mean')
     parser.add_argument('-enable_wandb', action='store_true')
     parser.add_argument('-log_wandb_ckpt', action='store_true')
     parser.add_argument('-log_eval', action='store_true')
@@ -72,7 +72,7 @@ if __name__ == "__main__":
             mask=torch.load(f)
             opt['datasets']['MASK']=1.*mask #convert to float
     diffusion = Model.create_model(opt)
-    diffusion.eval_dir=diffusion.eval_dir+'mask'
+    diffusion.eval_dir=diffusion.eval_dir
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
@@ -81,16 +81,15 @@ if __name__ == "__main__":
     avg_psnr = 0.0
     avg_ssim = 0.0
     idx = 0
-    diffusion.eval_dir=diffusion.eval_dir
-    result_path = diffusion.eval_dir
+    result_path = diffusion.eval_dir 
     os.makedirs(result_path, exist_ok=True)
     if args.mode=='MLMC':
         #Modify noise schedule to correspond to MLMC max L in diffusion
-        opt['model']['beta_schedule'][opt['phase']]['n_timestep']=diffusion.M**diffusion.Lmax
+        MLMCsteps=(diffusion.M**diffusion.Lmax)
         diffusion.set_new_noise_schedule(
-            opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'])
-
-        acc=[args.accuracy]
+            opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'],MLMCsteps=MLMCsteps)
+        print(diffusion.netG.sqrt_one_minus_alphas_cumprod)
+        acc=args.accuracy
         for _,  val_data in enumerate(val_loader):
             #val_data automatically has batch size 1 for phase=val
             idx += 1
