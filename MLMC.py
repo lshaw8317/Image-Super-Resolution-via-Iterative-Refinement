@@ -72,7 +72,7 @@ if __name__ == "__main__":
             mask=torch.load(f)
             opt['datasets']['MASK']=1.*mask #convert to float
     diffusion = Model.create_model(opt)
-    diffusion.eval_dir=diffusion.eval_dir
+    diffusion.eval_dir=diffusion.eval_dir+'_reweightBI2'
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
     logger.info('Initial Model Finished')
@@ -88,7 +88,6 @@ if __name__ == "__main__":
         MLMCsteps=(diffusion.M**diffusion.Lmax)
         diffusion.set_new_noise_schedule(
             opt['model']['beta_schedule'][opt['phase']], schedule_phase=opt['phase'],MLMCsteps=MLMCsteps)
-        print(diffusion.netG.sqrt_one_minus_alphas_cumprod)
         acc=args.accuracy
         for _,  val_data in enumerate(val_loader):
             #val_data automatically has batch size 1 for phase=val

@@ -46,8 +46,8 @@ class DDPM(BaseModel):
         self.mom2norm =lambda img: mom2norm(img,self.MASK)
         if opt['payoff']=='mean':
             self.Lmin=4
-            self.alpha0=.6
-            self.beta0=1.
+            self.alpha0=.69
+            self.beta0=1.05
             print("mean payoff selected.")
             self.payoff = lambda samples: torch.clip(samples,max=1.,min=-1.) #default to identity payoff
         elif opt['payoff']=='second_moment':
@@ -166,7 +166,7 @@ class DDPM(BaseModel):
         N0=self.N0
         Lmax=self.Lmax
         eval_dir = self.eval_dir
-        Nsamples=100
+        Nsamples=1000
         condition_x=self.data['SR'].to(self.device)
         Lmin=self.Lmin
         
@@ -225,9 +225,9 @@ class DDPM(BaseModel):
                 alpha=float(temp[0].item())
                 beta=float(temp[1].item())
         except:
-            pass
-        alpha=self.alpha0
-        beta=self.beta0
+            alpha=self.alpha0
+            beta=self.beta0
+        print(f'alpha={alpha},beta={beta}')
         #Do the calculations and simulations for num levels and complexity plot
         for i in range(len(acc)):
             e=acc[i]
@@ -283,7 +283,7 @@ class DDPM(BaseModel):
         N0=self.N0
         Lmax=self.Lmax
         Lmin=self.Lmin
-        L=Lmin+1
+        L=Lmin+2
 
         mylen=L+1-Lmin
         V=torch.zeros(mylen) #Initialise variance vector of each levels' variance
@@ -330,8 +330,7 @@ class DDPM(BaseModel):
             Nl_new=torch.ceil(((accsplit*accuracy)**-2)*torch.sum(sqrt_V*sqrt_cost)*(sqrt_V/sqrt_cost)) #Estimate optimal number of samples/level
             dN=torch.clip(Nl_new-N,min=0) #Number of additional samples
             print(f'Asking for {dN} new samples for l=[{Lmin,L}]')
-            print(f'sqrt variance={sqrt_V}')
-            print(f'sqrt_var = {torch.sum(2*V/N).sqrt()}, bias = {np.sqrt(2)*Yl[-1]/(M**alpha-1.)}')
+            print(f'sqrt_var = {torch.sum(2*V/N).sqrt()}, bias = {np.sqrt(2)*max(Yl[-2]/M**alpha,Yl[-1])/(M**alpha-1.)}')
             if torch.sum(dN > 0.01*N).item() == 0: #Almost converged
                 if max(Yl[-2]/(M**alpha),Yl[-1])>(M**alpha-1)*accuracy*np.sqrt(1-accsplit**2):
                     L+=1

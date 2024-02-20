@@ -236,7 +236,7 @@ class GaussianDiffusion(nn.Module):
         img_f = torch.randn((bs,*shape[1:]), device=device)
         img_c = img_f.clone().detach().to(device)
         alpha_c=torch.tensor([1.]).to(device)
-        dWc=torch.zeros_like(x).to(device)
+        noise_c=torch.zeros_like(x).to(device)
         numsteps=int(self.M**l)
         maxsteps=self.M**self.Lmax #want to do a step for 0,1,2...,M**L-1
         stepsize=maxsteps//numsteps
@@ -259,9 +259,13 @@ class GaussianDiffusion(nn.Module):
             model_mean = torch.sqrt(1./alpha_f)*(img_f-beta_f*ftheta/self.sqrt_one_minus_alphas_cumprod[fine_time])
             noise = dWf*torch.sqrt(beta_f)*(self.sqrt_one_minus_alphas_cumprod[fine_timem1]/self.sqrt_one_minus_alphas_cumprod[fine_time])
             img_f = model_mean + noise
-            
+
+            #Reweight brownian increments
+            scaler=torch.sqrt(1/(1.-alpha_c)) if n % self.M !=0 else torch.zeros_like(alpha_c)
             alpha_c*=alpha_f
-            dWc+=dWf*torch.sqrt(torch.tensor([1./self.M]).to(device))
+            scaler*=(self.sqrt_one_minus_alphas_cumprod[fine_timem1]/self.sqrt_one_minus_alphas_cumprod[fine_time]**2)
+            scaler*=torch.sqrt((1.-alpha_c)*(1-self.alphas_cumprod[fine_time])-beta_f*(1-self.alphas_cumprod[coarse_time]))
+            noise_c=scaler*noise_c+noise
             fine_time=max(0,fine_time-stepsize) #for last iteration when fine_time=(M^L/M^l-1)-M^L/M^l=-1
             if n % self.M == self.M-1:
                 noise_level = torch.FloatTensor(
@@ -270,10 +274,9 @@ class GaussianDiffusion(nn.Module):
                 ftheta = self.denoise_fn(torch.cat([x, img_c], dim=1), noise_level)
                 beta_c=(1.-alpha_c)
                 model_mean = torch.sqrt(1./alpha_c)*(img_c-beta_c*ftheta/self.sqrt_one_minus_alphas_cumprod[coarse_time])
-                noise = dWc*torch.sqrt(beta_c)*(self.sqrt_one_minus_alphas_cumprod[fine_time]/self.sqrt_one_minus_alphas_cumprod[coarse_time])
-                img_c = model_mean + noise
+                img_c = model_mean + noise_c
                 alpha_c=torch.tensor([1.]).to(device)
-                dWc=torch.zeros_like(img_c).to(device)
+                noise_c=torch.zeros_like(img_c).to(device)
                 coarse_time=fine_time
             
         return img_f,img_c
