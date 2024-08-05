@@ -26,10 +26,10 @@ class DDPM(BaseModel):
         
         self.M=2
         self.Lmax=11
-        self.Lmin=3
+        self.Lmin=4
         self.mlmc_batch_size=80
         self.accsplit=np.sqrt(.5)
-        self.N0=80
+        self.N0=10
         self.eval_dir=opt['path']['experiments_root']
         self.image_size=self.opt['model']['diffusion']['image_size']
         self.channels=self.opt['model']['diffusion']['channels']
@@ -215,18 +215,20 @@ class DDPM(BaseModel):
         
             print(f'Estimated alpha={alpha}\n Estimated beta={beta}\n')
             with open(os.path.join(this_sample_dir, "mlmc_info.txt"),'w') as f:
-                f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={Lmin}, Nsamples={Nsamples}, M={M}.\n')
+                f.write(f'MLMC params: N0={N0}, Lmax={Lmax}, Lmin={cutoff}, Nsamples={Nsamples}, M={M}.\n')
                 f.write(f'Estimated alpha={alpha}\n Estimated beta={beta}')
             with open(os.path.join(this_sample_dir, "alphabeta.pt"), "wb") as fout:
-                torch.save(torch.tensor([alpha,beta]),fout)
+                torch.save(torch.tensor([alpha,beta,cutoff]),fout)
         try:        
             with open(os.path.join(this_sample_dir, "alphabeta.pt"),'rb') as f:
                 temp=torch.load(f)
                 alpha=float(temp[0].item())
                 beta=float(temp[1].item())
+                Lmin=int(temp[2].item())
         except:
             alpha=self.alpha0
             beta=self.beta0
+            Lmin=self.Lmin
         print(f'alpha={alpha},beta={beta}')
         #Do the calculations and simulations for num levels and complexity plot
         for i in range(len(acc)):
@@ -283,7 +285,7 @@ class DDPM(BaseModel):
         N0=self.N0
         Lmax=self.Lmax
         Lmin=self.Lmin
-        L=Lmin+2
+        L=Lmin+1
 
         mylen=L+1-Lmin
         V=torch.zeros(mylen) #Initialise variance vector of each levels' variance
@@ -306,12 +308,17 @@ class DDPM(BaseModel):
                     
             N+=dN #Increment samples taken counter for each level
             Yl=(self.imagenorm(sums[:,0])/N).to(torch.float32)
-            V=torch.clip(self.mom2norm(sqsums[:,0])/N-(Yl)**2,min=0.).to(torch.float32) #Calculate variance based on updated samples
-            
-            ##Fix to deal with zero variance or mean by linear extrapolation
-            Yl[2:]=torch.maximum(Yl[2:],.5*Yl[1:-1]*M**(-alpha))
-            V[2:]=torch.maximum(V[2:],.5*V[1:-1]*M**(-beta))
-            
+            cf=1
+            while True:
+                V=torch.clip(self.mom2norm(sqsums[:,0])/N-(Yl)**2,min=0.).to(torch.float32) #Calculate variance based on updated samples
+                ##Fix to deal with zero variance or mean by linear extrapolation
+                V[2:]=torch.maximum(V[2:],.5*V[1:-1]*M**(-beta))
+                cf_=torch.sqrt((1+V/(N*Yl**2)))
+                Y_corrected=(self.imagenorm(sums[:,0])/N).to(torch.float32)/cf_ #correct for bias
+                Yl=Y_corrected
+                if torch.max(cf_-cf)<.01:
+                    break
+                cf=cf_
             #Estimate order of weak convergence using LR
             #Yl=(M^alpha-1)khl^alpha=(M^alpha-1)k(TM^-l)^alpha=((M^alpha-1)kT^alpha)M^(-l*alpha)
             #=>log(Yl)=log(k(M^alpha-1)T^alpha)-alpha*l*log(M)
@@ -330,9 +337,10 @@ class DDPM(BaseModel):
             Nl_new=torch.ceil(((accsplit*accuracy)**-2)*torch.sum(sqrt_V*sqrt_cost)*(sqrt_V/sqrt_cost)) #Estimate optimal number of samples/level
             dN=torch.clip(Nl_new-N,min=0) #Number of additional samples
             print(f'Asking for {dN} new samples for l=[{Lmin,L}]')
-            print(f'sqrt_var = {torch.sum(2*V/N).sqrt()}, bias = {np.sqrt(2)*max(Yl[-2]/M**alpha,Yl[-1])/(M**alpha-1.)}')
+            print(f'sqrt_var = {torch.sum(2*V/N).sqrt()}, bias = {np.sqrt(2)*(Yl[-1])/(M**alpha-1.)}')
             if torch.sum(dN > 0.01*N).item() == 0: #Almost converged
-                if max(Yl[-2]/(M**alpha),Yl[-1])>(M**alpha-1)*accuracy*np.sqrt(1-accsplit**2):
+                test=max(Yl[-2]/(M**alpha),Yl[-1]) if L-Lmin>1 else Yl[-1]
+                if test>(M**alpha-1)*accuracy*np.sqrt(1-accsplit**2):
                     L+=1
                     print(f'Increased L to {L}')
                     if (L>Lmax):
